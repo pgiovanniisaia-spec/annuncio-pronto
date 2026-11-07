@@ -20,7 +20,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      - name: Android SDK (già presente sul runner)
+        run: echo "sdk.dir=$ANDROID_HOME" && yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Installa dipendenze
         run: npm install
