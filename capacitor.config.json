@@ -1,0 +1,13 @@
+{
+  "appId": "it.annunciopronto.app",
+  "appName": "Annuncio Pronto",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#23584A">
+<title>Annuncio Pronto</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <div class="label">Per Vinted · scarpe, abbigliamento, capispalla</div>
+      <button class="btn small" id="openSettings" type="button">Impostazioni</button>
+    </div>
+    <h1>Annuncio Pronto</h1>
+    <p>Aggiungi le foto: le sistemo subito. Poi scrivo titolo, descrizione e hashtag.</p>
+  </header>
+
+  <section class="panel" id="settings" hidden>
+    <h2>Impostazioni</h2>
+    <div class="field">
+      <label class="label" for="apiKey">Chiave API Anthropic</label>
+      <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
+      <span class="hint">Serve per scrivere le descrizioni. Resta salvata solo su questo telefono. La crei su console.anthropic.com.</span>
+    </div>
+    <div class="field">
+      <span class="label">Modello</span>
+      <div class="seg" id="model">
+        <button type="button" data-v="claude-haiku-5-5" aria-pressed="true">Veloce</button>
+        <button type="button" data-v="claude-sonnet-5-5" aria-pressed="false">Più accurato</button>
+      </div>
+      <span class="hint">Veloce costa meno e risponde in pochi secondi.</span>
+    </div>
+    <button class="btn primary" id="saveSettings" type="button">Salva impostazioni</button>
+  </section>
+
+  <section class="panel">
+    <div class="step"><span class="n">1</span><h2>Foto</h2><span class="count" id="count">0 / 20</span></div>
+    <label class="drop" for="file" id="drop">
+      <strong>Scegli o scatta le foto</strong>
+      <span>Fino a 20 foto. La prima è la copertina. Tieni premuta una foto per vedere l'originale.</span>
+    </label>
+    <input type="file" id="file" accept="image/*" multiple>
+    <div class="grid" id="grid"></div>
+    <div class="toolbar" id="photoTools" hidden>
+      <button class="btn primary" id="shareAll" type="button">Condividi tutte</button>
+      <button class="btn" id="saveAll" type="button">Salva nel telefono</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="step"><span class="n">2</span><h2>Dettagli</h2></div>
+    <div class="field">
+      <span class="label">Categoria</span>
+      <div class="seg" id="cat">
+        <button type="button" data-v="Scarpe" aria-pressed="true">Scarpe</button>
+        <button type="button" data-v="Abbigliamento" aria-pressed="false">Abbigliamento</button>
+        <button type="button" data-v="Capispalla" aria-pressed="false">Capispalla</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label class="label" for="brand">Marca</label><input type="text" id="brand" placeholder="Se la conosci"></div>
+      <div class="field"><label class="label" for="size">Taglia</label><input type="text" id="size" placeholder="es. 42 EU"></div>
+    </div>
+    <div class="field">
+      <label class="label" for="cond">Condizioni</label>
+      <select id="cond">
+        <option>Nuovo con cartellino</option>
+        <option>Nuovo senza cartellino</option>
+        <option selected>Ottime condizioni</option>
+        <option>Buone condizioni</option>
+        <option>Discrete condizioni</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="label" for="notes">Note (facoltative)</label>
+      <textarea id="notes" placeholder="Difetti, misure, materiale, perché lo vendi…"></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <span class="label">Tono</span>
+        <div class="seg" id="tone">
+          <button type="button" data-v="amichevole" aria-pressed="true">Amichevole</button>
+          <button type="button" data-v="essenziale" aria-pressed="false">Essenziale</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">Formato foto</span>
+        <div class="seg" id="fmt">
+          <button type="button" data-v="34" aria-pressed="true">Verticale 3:4</button>
+          <button type="button" data-v="11" aria-pressed="false">Quadrato</button>
+        </div>
+      </div>
+    </div>
+    <label class="toggle"><input type="checkbox" id="whiten" checked> Schiarisci lo sfondo chiaro</label>
+  </section>
+
+  <button class="go" id="go" type="button" disabled>Scrivi l'annuncio</button>
+  <div class="status" id="status" role="status">Aggiungi almeno una foto per iniziare.</div>
+
+  <section class="label-card" id="resText" hidden>
+    <div class="out" id="out"></div>
+  </section>
+</div>
+<script src="enhance.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

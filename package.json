@@ -1,0 +1,22 @@
+{
+  "name": "annuncio-pronto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App Android che sistema le foto per Vinted e scrive l'annuncio con Claude.",
+  "scripts": {
+    "serve": "npx http-server www -p 8080 -c-1",
+    "sync": "npx cap sync android",
+    "icons": "npx capacitor-assets generate --android --iconBackgroundColor '#23584A' --splashBackgroundColor '#23584A'",
+    "apk": "npx cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/share": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0"
+  }
+}
