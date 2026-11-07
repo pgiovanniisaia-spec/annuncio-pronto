@@ -50,7 +50,7 @@ jobs:
       - name: Crea progetto Android
         run: |
           if [ ! -d android ]; then npx cap add android; fi
-          npx capacitor-assets generate --android --iconBackgroundColor '#E8F3EC' --splashBackgroundColor '#FFFFFF' --splashBackgroundColorDark '#FFFFFF' || echo "Icone non generate, uso quelle predefinite"
+          npx capacitor-assets generate --android --iconBackgroundColor '#23584A' --splashBackgroundColor '#FFFFFF' --splashBackgroundColorDark '#FFFFFF' || echo "Icone non generate, uso quelle predefinite"
           npx cap sync android
           node scripts/android-setup.mjs
 

@@ -1,18 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="230" fill="#E8F3EC"/>
-  <g transform="translate(112.63999999999999 112.63999999999999) scale(0.78)">
-<g transform="translate(-134 86)">
-  <!-- ListLab: cartellino del prezzo + scintilla. Solo il simbolo, sfondo trasparente. -->
-  <g transform="translate(40 -20) rotate(-38 512 540)">
-    <path d="M235 540 L395 365 H770 Q800 365 800 395 V685 Q800 715 770 715 H395 Z"
-          fill="#1F5444" stroke="#1F5444" stroke-width="56" stroke-linejoin="round"/>
-    <circle cx="405" cy="540" r="44" fill="#E8F3EC"/>
-    <rect x="510" y="470" width="200" height="40" rx="20" fill="#E8F3EC" opacity=".9"/>
-    <rect x="510" y="570" width="140" height="40" rx="20" fill="#E8F3EC" opacity=".9"/>
+  <rect width="1024" height="1024" rx="230" fill="#23584A"/>
+  <g transform="translate(0 0) scale(1)">
+  <!-- ListLab: cartellino del prezzo verticale con spunta ("annuncio pronto").
+       Solo il simbolo (chiaro), sfondo trasparente: il fondo verde scuro lo aggiunge scripts/render-logo.js. -->
+  <g transform="translate(0 20)">
+    <path d="M352 400 L512 250 L672 400 V720 Q672 750 642 750 H382 Q352 750 352 720 Z"
+          fill="#EEF0EC" stroke="#EEF0EC" stroke-width="56" stroke-linejoin="round"/>
+    <circle cx="512" cy="372" r="38" fill="#23584A"/>
+    <path d="M418 568 L486 636 L612 506" fill="none" stroke="#23584A" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
-  <g fill="#3E9A76" stroke="#E8F3EC" stroke-width="26" stroke-linejoin="round" paint-order="stroke">
-    <path d="M805 107 Q816.8 213.2 923 225 Q816.8 236.8 805 343 Q793.2 236.8 687 225 Q793.2 213.2 805 107 Z"/>
-    <path d="M915 312 Q920.8 364.2 973 370 Q920.8 375.8 915 428 Q909.2 375.8 857 370 Q909.2 364.2 915 312 Z"/>
-  </g>
-</g>
 </g></svg>
