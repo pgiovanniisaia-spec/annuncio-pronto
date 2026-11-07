@@ -406,3 +406,27 @@ html.camera-on body > *:not(#gcam){visibility:hidden}
 #gcam.flash::after{content:"";position:absolute;inset:0;background:#fff;animation:flash .3s ease-out forwards;pointer-events:none}
 @keyframes flash{from{opacity:.9}to{opacity:0}}
 .subhead{margin-top:10px!important;font-size:17px!important}
+
+/* ---------- AI di immagini: riferimento stile, costo, conferme, varianti ---------- */
+.vbottom{flex-wrap:wrap}
+.vrow{flex-basis:100%;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.vrow .vbtn{font-size:13.5px;min-height:40px;padding:8px 13px}
+.vmsg{flex-basis:100%;text-align:center;font-size:13px;min-height:0;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.vmsg:empty{display:none}
+.refbox{display:grid;grid-template-columns:56px 1fr;grid-template-areas:"img txt" "img btn";gap:4px 12px;align-items:center;padding:10px;border:1px dashed color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:14px;background:var(--surface-2)}
+.ref-thumb,.ref-ph{grid-area:img;width:56px;height:74px;border-radius:9px;object-fit:cover;background:var(--tag);display:grid;place-items:center;font-size:22px}
+.ref-txt{grid-area:txt;display:flex;flex-direction:column}
+.ref-txt strong{font-size:15px}.ref-txt small{font-size:12px;color:var(--muted);line-height:1.35}
+.ref-btns{grid-area:btn;display:flex;gap:14px;align-items:center}
+.ll-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:var(--tag);font-size:14px}
+.ll-cost strong{font-family:var(--mono);font-size:15px;color:var(--accent)}
+.ll-sheet{position:fixed;inset:0;z-index:500;background:rgba(5,15,10,.55);display:flex;align-items:flex-end;justify-content:center}
+.ll-sheet-box{background:var(--surface);color:var(--fg);width:100%;max-width:620px;max-height:92vh;overflow:auto;border-radius:22px 22px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;animation:rise .25s cubic-bezier(.2,.8,.3,1)}
+.ll-sheet-box h3{margin:0;font-family:var(--display);font-size:20px}
+.ll-sheet-box p{margin:0;color:var(--muted)}
+.ll-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ll-variants{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ll-variants button{display:flex;flex-direction:column;gap:4px;padding:6px;border:2px solid var(--line);border-radius:14px;background:var(--surface-2);font:inherit;font-weight:600;color:var(--fg);cursor:pointer}
+.ll-variants button:active,.ll-variants button:focus-visible{border-color:var(--accent)}
+.ll-variants img{width:100%;aspect-ratio:2/3;object-fit:contain;border-radius:9px;background:#0b1510}
+.g-vseg{display:flex;justify-content:center}

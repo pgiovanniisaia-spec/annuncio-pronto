@@ -59,8 +59,15 @@ let apiKey = store.get("ap_key", "");
 let model = store.get("ap_model", "claude-haiku-5-5");
 // OpenAI (foto con AI): chiave, modello e qualità, solo in localStorage sul telefono
 let openaiKey = store.get("ap_openai_key", "");
-let imgModel = store.get("ap_img_model", "gpt-image-2");
-let imgQuality = store.get("ap_img_quality", "medium");
+let imgModel = store.get("ap_img_model", "gpt-image-2.5-sunburst");
+let imgQuality = store.get("ap_img_quality", "high");
+let imgVariants = store.get("ap_img_variants", "1") === "2";
+// aggiornamento: qualità Alta e modello più recente come predefiniti (una volta sola)
+if (store.get("ap_img_v2", "") !== "1") {
+  if (imgQuality === "medium") imgQuality = "high";
+  if (imgModel === "gpt-image-2" || imgModel === "gpt-image-1") imgModel = "gpt-image-2.5-sunburst";
+  store.set("ap_img_quality", imgQuality); store.set("ap_img_model", imgModel); store.set("ap_img_v2", "1");
+}
 
 function segSet(id, v) { [...$(id).children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
 function seg(id, onPick) {
@@ -79,7 +86,7 @@ section("impostazioni", () => {
   $("saveSettings").onclick = () => {
     apiKey = $("apiKey").value.trim(); model = pendingModel;
     store.set("ap_key", apiKey); store.set("ap_model", model);
-    openaiKey = $("openaiKey").value.trim(); imgModel = $("imgModel").value.trim() || "gpt-image-2"; imgQuality = pendingQuality;
+    openaiKey = $("openaiKey").value.trim(); imgModel = $("imgModel").value.trim() || "gpt-image-2.5-sunburst"; imgQuality = pendingQuality;
     store.set("ap_openai_key", openaiKey); store.set("ap_img_model", imgModel); store.set("ap_img_quality", imgQuality);
     const st = $("settingsStatus");
     st.textContent = apiKey ? "Impostazioni salvate ✓" : "Salvate. Senza chiave preparo solo una bozza semplice.";
@@ -108,7 +115,7 @@ function showTab(name) {
     $("apiKey").value = apiKey; segSet("model", model); $("settingsStatus").textContent = "";
     $("openaiKey").value = openaiKey; $("imgModel").value = imgModel; segSet("imgQuality", imgQuality);
   }
-  if (name === "ai" && studio) studio.sync();
+  if (name === "ai" && studio) { studio.sync(); if (studio.updateCost) studio.updateCost(); }
 }
 section("schede", () => {
   document.addEventListener("click", e => {
@@ -205,7 +212,8 @@ fileInput.addEventListener("change", () => { const f = [...(fileInput.files || [
 });
 
 function newItem(file, props) {
-  return Object.assign({ id: nextId++, file, rot: 0, tilt: 0, edits: new Set(), forceWhiten: false, box: null, boxRot: 0,
+  // rawFile = foto originale così come scelta/scattata: è quella che va a OpenAI
+  return Object.assign({ id: nextId++, file, rawFile: file, rawRot: null, aiNative: false, rot: 0, tilt: 0, edits: new Set(), forceWhiten: false, box: null, boxRot: 0,
     src: null, origSrc: null, noEnhance: false, lockCrop: false, step: null, ver: 0, out: null, outPromise: null }, props || {});
 }
 function startItem(it) {
@@ -240,11 +248,12 @@ async function loadBitmap(file) {
 }
 async function prepare(it) {
   if (it.origFile && !it.origSrc) it.origSrc = await fileCanvas(it.origFile);
-  it.src = await fileCanvas(it.file);
+  it.src = await fileCanvas(it.file, it.aiNative);
 }
-async function fileCanvas(file) {
-  const bmp = await loadBitmap(file);
-  const k = Math.min(1, (WORK_SIDE * 4 / 3) / Math.max(bmp.width, bmp.height));
+// full = true per i risultati AI: nessuna riduzione (fino a 4096 px)
+async function fileCanvas(file, full) {
+  const bmp = full ? await createImageBitmap(file, { imageOrientation: "from-image" }) : await loadBitmap(file);
+  const k = Math.min(1, (full ? 4096 : WORK_SIDE * 4 / 3) / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas");
   c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(bmp, 0, 0, c.width, c.height);
@@ -301,10 +310,39 @@ function borderColor(c) {
   return [med(R), med(G), med(B)];
 }
 
+// risultato AI: alla sua risoluzione reale, senza filtri; per il formato 3:4 si aggiunge solo
+// un margine prolungando i bordi (mai ridimensionare verso il basso)
+function nativeCanvas(Src) {
+  const W = Src.width, H = Src.height, A = S.fmt === "34" ? 3 / 4 : 1;
+  let OW = W, OH = H;
+  if (W / H > A) OH = Math.round(W / A); else OW = Math.round(H * A);
+  const out = document.createElement("canvas"); out.width = OW; out.height = OH;
+  const x = out.getContext("2d"), dx = Math.floor((OW - W) / 2), dy = Math.floor((OH - H) / 2);
+  x.imageSmoothingEnabled = false;
+  if (dx > 0) { x.drawImage(Src, 0, 0, 1, H, 0, dy, dx, H); x.drawImage(Src, W - 1, 0, 1, H, dx + W, dy, OW - dx - W, H); }
+  if (dy > 0) { x.drawImage(Src, 0, 0, W, 1, dx, 0, W, dy); x.drawImage(Src, 0, H - 1, W, 1, dx, dy + H, W, OH - dy - H); }
+  x.drawImage(Src, dx, dy);
+  return out;
+}
 async function renderItem(it) {
   if (!it.src) return;
   const v = ++it.ver;
   setWorking(it, true);
+  if (it.aiNative) {
+    const out = nativeCanvas(it.src);
+    await new Promise(r => setTimeout(r, 0));
+    if (v !== it.ver || !S.items.includes(it)) return;
+    setProcessed(it, out); setWorking(it, false);
+    it.el.classList.remove("done"); void it.el.offsetWidth; it.el.classList.add("done");
+    it.out = null;
+    // qualità JPEG massima: il risultato AI resta com'è (nessuna perdita visibile)
+    it.outPromise = new Promise(r => out.toBlob(r, "image/jpeg", 1)).then(b => {
+      if (v === it.ver) { it.out = b; refresh(); if (viewer) viewer.refreshItem(it); }
+      return b;
+    });
+    refresh();
+    return;
+  }
   const Src = oriented(it), W = Src.width, H = Src.height;
   const OW = 1200, OH = S.fmt === "34" ? 1600 : 1200, A = OW / OH;
   let rx, ry, rw, rh;
@@ -972,32 +1010,79 @@ on("reset", () => {
 // ---------- foto modificate con l'AI (OpenAI, ai-images.js) ----------
 const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("blob")), type || "image/jpeg", q || 0.92));
 const imgSize = () => S.fmt === "11" ? "1024x1024" : "1024x1536";
-// sostituisce la foto con la versione AI; l'originale resta per «Originale» e «Tieni l'originale»
+// sostituisce la foto con la versione AI (così com'è); l'originale resta per «Originale» e «Tieni l'originale»
 async function useAiImage(it, blob) {
-  if (!it.origSrc) it.origSrc = it.tilt ? oriented(it) : rotated(it.src, it.rot);
-  it.src = await fileCanvas(blob);
-  it.rot = 0; it.tilt = 0; it.box = [0, 0, 1, 1]; it.boxRot = 0;   // l'AI ha già inquadrato: niente tagli
-  it.noEnhance = true; it.lockCrop = true; it.edits.add("ai");
+  if (!it.origSrc) { it.origSrc = it.tilt ? oriented(it) : rotated(it.src, it.rot); it.rawRot = it.rot; }
+  it.src = await fileCanvas(blob, true);
+  it.rot = 0; it.tilt = 0; it.box = null; it.boxRot = 0;
+  it.noEnhance = true; it.aiNative = true; it.lockCrop = true; it.edits.add("ai");
   await enqueue(() => renderItem(it));
 }
 async function keepOriginal(it) {
   if (!it.origSrc) return;
   it.src = it.origSrc; it.origSrc = null;
-  it.noEnhance = false; it.lockCrop = false; it.box = null; it.edits.delete("ai");
+  it.noEnhance = false; it.aiNative = false; it.lockCrop = false; it.box = null; it.edits.delete("ai");
   await enqueue(() => renderItem(it));
 }
-async function aiEditItem(it, mode, extra) {
+// foto originale a piena qualità per OpenAI / ChatGPT (orientamento corretto, JPEG 95, niente filtri)
+function originalBlob(it) {
+  const rot = it.rawRot != null ? it.rawRot : it.rot;
+  return window.AIImages.fullQuality(it.rawFile || it.file, rot);
+}
+const costOf = (n, images) => window.AIImages.formatCost(window.AIImages.estimateCost({ quality: imgQuality, n, images }));
+const QUALITY_NAMES = { low: "Bozza (anteprima)", medium: "Media", high: "Alta" };
+// chiede conferma mostrando il costo stimato della singola operazione
+async function confirmAi(what, n, images, count) {
+  const each = window.AIImages.estimateCost({ quality: imgQuality, n, images });
+  const r = await window.LLAsk({
+    title: "Inviare a OpenAI?",
+    body: `${what}: ${count > 1 ? count + " foto, " : ""}${n > 1 ? n + " varianti, " : ""}qualità ${QUALITY_NAMES[imgQuality] || imgQuality}${images > 1 ? ", con foto di riferimento stile" : ""}.`,
+    cost: window.AIImages.formatCost(each * (count || 1)), ok: "Invia", cancel: "Annulla"
+  });
+  return r.ok;
+}
+async function aiEditItem(it, mode, extra, opts) {
+  opts = opts || {};
   if (!openaiKey) throw new Error("Per la modifica con AI serve la chiave OpenAI: aggiungila in Impostazioni.");
-  const input = await toBlob(it.origSrc || oriented(it), "image/jpeg", 0.92);
+  const input = await originalBlob(it);
   setWorking(it, true);
   try {
-    const out = await window.AIImages.editImage({ image: input, mode, prompt: extra, apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize() });
-    await useAiImage(it, out);
-    return out;
+    const outs = await window.AIImages.editImage({ image: input, reference: opts.reference || null, mode, prompt: extra,
+      apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize(), n: opts.n || 1 });
+    const chosen = outs.length > 1 ? await window.LLPick(outs, "Scegli la variante migliore") : outs[0];
+    if (!chosen) { setWorking(it, false); return null; }
+    await useAiImage(it, chosen);
+    return chosen;
   } catch (e) {
     setWorking(it, false);
     throw new Error(window.AIImages.errorText(e));
   }
+}
+
+// ---------- alternativa gratuita: app ChatGPT ----------
+function chatgptPrompt() {
+  const coat = S.cat === "Capispalla";
+  return window.AIImages.buildPrompt(coat ? "coat-cover" : "wall-hanging", "", false);
+}
+async function shareToChatGPT(it) {
+  const blob = await originalBlob(it), prompt = chatgptPrompt();
+  const copied = await copyPlain(prompt);
+  const note = copied ? "Prompt copiato: incollalo in ChatGPT insieme alla foto, poi salva il risultato e usa «Importa risultato»." : "Apri ChatGPT, allega la foto e scrivi il prompt.";
+  try {
+    if (native && Filesystem && Share) {
+      const r = await Filesystem.writeFile({ path: "chatgpt/foto-originale.jpg", data: await blobToB64(blob), directory: "CACHE", recursive: true });
+      await Share.share({ title: "Modifica con ChatGPT", text: prompt, files: [r.uri], dialogTitle: "Apri con ChatGPT" });
+    } else if (navigator.canShare && navigator.canShare({ files: [new File([blob], "foto.jpg", { type: "image/jpeg" })] })) {
+      await navigator.share({ files: [new File([blob], "foto-originale.jpg", { type: "image/jpeg" })], text: prompt });
+    } else downloadBlob(blob, "foto-originale.jpg");
+  } catch (e) { if (!isCancel(e)) return "Condivisione non riuscita."; }
+  return note;
+}
+async function importResult(it) {
+  const f = await window.LLPickImage();
+  if (!f) return "";
+  await useAiImage(it, f);
+  return "Risultato importato al posto della foto, con il badge ✦ AI.";
 }
 
 // ---------- visualizzatore a schermo intero (viewer.js) ----------
@@ -1049,7 +1134,9 @@ section("visualizzatore", () => {
     aspect: () => S.fmt === "34" ? 4 / 3 : 1,
     isWorking: it => it.el.classList.contains("working"),
     rotate: it => rotateItem(it),
-    remove: it => removeItem(it)
+    remove: it => removeItem(it),
+    chatgpt: it => shareToChatGPT(it),
+    importResult: it => importResult(it)
   });
 });
 
@@ -1082,15 +1169,23 @@ section("studio", () => {
       await rerender(list);
       return found ? `Ritaglio fatto su ${found} ${found === 1 ? "foto" : "foto"}. Le trovi in Home.` : "Claude non ha trovato un ritaglio migliore: le foto restano com'erano.";
     },
-    async applyAiEdit(list, mode, extra) {
+    async applyAiEdit(list, mode, extra, opts) {
+      opts = opts || {};
       if (!openaiKey) throw new Error("Per la modifica con AI serve la chiave OpenAI: aggiungila nella scheda Impostazioni.");
+      const reference = opts.useRef ? await window.LLStyleRef.get() : null;
+      const n = opts.n || 1;
+      if (!await confirmAi("Modifica con AI", n, reference ? 2 : 1, list.length)) return "Operazione annullata: nessun costo.";
       let ok = 0, err = "";
       for (const it of list) {
-        try { await aiEditItem(it, mode, extra); ok++; } catch (e) { err = e.message; }
+        try { if (await aiEditItem(it, mode, extra, { reference, n })) ok++; } catch (e) { err = e.message; }
       }
-      if (!ok) throw new Error(err || "Modifica con AI non riuscita.");
+      if (!ok && err) throw new Error(err);
+      if (!ok) return "Nessuna variante scelta: foto lasciate com'erano.";
       return `Modifica AI fatta su ${ok} ${ok === 1 ? "foto" : "foto"}${err ? " (alcune non riuscite: " + err + ")" : ""}. Le trovi in Home con il badge ✦ AI.`;
     },
+    costText: (n, useRef) => costOf(n, useRef ? 2 : 1) + " a foto · qualità " + (QUALITY_NAMES[imgQuality] || imgQuality),
+    variants: () => imgVariants,
+    setVariants: v => { imgVariants = !!v; store.set("ap_img_variants", v ? "2" : "1"); },
     async keepOriginal(list) { for (const it of list) await keepOriginal(it); return "Ripristinate le foto originali."; },
     async applyTilt(list, deg) {
       list.forEach(it => { it.tilt = deg; if (deg) it.edits.add("straighten"); else it.edits.delete("straighten"); });
@@ -1112,7 +1207,8 @@ async function replaceGrid(entries) {
     const file = new File([e.blob], `${String(i + 1).padStart(2, "0")}-${e.name || "foto.jpg"}`, { type: e.blob.type || "image/jpeg" });
     const it = newItem(file, {
       step: e.step, lockCrop: true,                   // ordine e ritaglio decisi dal servizio guidato
-      noEnhance: !!e.ai, box: e.ai ? [0, 0, 1, 1] : (e.box || null),
+      noEnhance: !!e.ai, aiNative: !!e.ai, box: e.ai ? null : (e.box || null),
+      ...(e.rawBlob ? { rawFile: new File([e.rawBlob], "originale.jpg", { type: e.rawBlob.type || "image/jpeg" }) } : {}),
       origFile: e.origBlob ? new File([e.origBlob], "originale.jpg", { type: e.origBlob.type || "image/jpeg" }) : null
     });
     if (e.ai) it.edits.add("ai");
@@ -1143,10 +1239,20 @@ section("servizio guidato", () => {
     plugin, haptic,
     keys: () => ({ claude: !!apiKey, openai: !!openaiKey }),
     claude: (images, prompt, max) => callClaudeB64(images, prompt, max),
-    async aiEdit(blob, mode) {
-      try { return await window.AIImages.editImage({ image: blob, mode, apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize() }); }
+    // blob = foto originale; opts { reference, n }; restituisce un array di Blob (1 o 2 varianti)
+    async aiEdit(blob, mode, opts) {
+      opts = opts || {};
+      try { return await window.AIImages.editImage({ image: await window.AIImages.fullQuality(blob, 0), reference: opts.reference || null, mode, apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize(), n: opts.n || 1 }); }
       catch (e) { throw new Error(window.AIImages.errorText(e)); }
     },
+    confirmAi: (what, n, images) => window.LLAsk({
+      title: "Inviare a OpenAI?", body: `${what}${n > 1 ? ", " + n + " varianti" : ""}, qualità ${QUALITY_NAMES[imgQuality] || imgQuality}${images > 1 ? ", con foto di riferimento stile" : ""}.`,
+      cost: costOf(n, images), ok: "Invia", cancel: "Senza AI", remember: "Non chiedere più per questo annuncio"
+    }),
+    costText: (n, images) => costOf(n, images),
+    styleRef: () => window.LLStyleRef.get(),
+    variants: () => imgVariants,
+    setVariants: v => { imgVariants = !!v; store.set("ap_img_variants", v ? "2" : "1"); },
     replaceGrid,
     getDetails, setDetails,
     setCategory,

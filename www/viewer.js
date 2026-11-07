@@ -300,6 +300,18 @@
       render();
     });
 
+    // alternativa gratuita: app ChatGPT (condividi originale + prompt) e importazione del risultato
+    const vmsg = t => { const m = $("vMsg"); m.textContent = t || ""; clearTimeout(m._h); if (t) m._h = setTimeout(() => { m.textContent = ""; }, 7000); };
+    $("vChatgpt").addEventListener("click", async () => {
+      const it = cur(); if (!it || !api.chatgpt) return;
+      vmsg("Preparo la foto originale…");
+      try { vmsg(await api.chatgpt(it)); } catch (e) { vmsg("Non riuscito: " + (e.message || e)); }
+    });
+    $("vImport").addEventListener("click", async () => {
+      const it = cur(); if (!it || !api.importResult) return;
+      try { const t = await api.importResult(it); if (t) { vmsg(t); render(); } } catch (e) { vmsg("Importazione non riuscita: " + (e.message || e)); }
+    });
+
     // chiamata da app.js quando una foto è stata rielaborata (es. dopo Ruota)
     function refreshItem(it) {
       if (!isOpen) return;

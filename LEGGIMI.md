@@ -45,9 +45,14 @@ Se chiudi l'app a metà, alla riapertura riprende da dove eri rimasto.
 
 Servono due chiavi, da inserire in **Impostazioni**: quella di **Anthropic** (testo, etichette, controllo dell'inquadratura) e quella di **OpenAI** (copertina e pulizia dello sfondo). Senza la chiave OpenAI puoi usare «Solo sistemazione locale», che è gratuita.
 
-Costo indicativo di un servizio completo con qualità «Media»:
-- OpenAI: circa 5–6 centesimi per foto modificata, quindi 15–20 centesimi per copertina, fronte e retro;
+Costo indicativo (il costo stimato compare sempre prima di ogni invio):
+- copertina in qualità **Alta**: circa 0,22 $ (0,24 $ con la foto di riferimento stile, circa 0,44 $ con 2 varianti);
+- fronte e retro con AI: circa 0,22 $ ciascuno in Alta (oppure gratis con «Senza AI» / «Solo sistemazione locale»);
 - Claude Veloce: meno di 1 centesimo in tutto.
+
+**Foto di riferimento stile**: scegli una tua foto riuscita (es. un cappotto appeso a un muro bianco con luce naturale). L'AI ne copia scena, luce e inquadratura per tutte le copertine, ma non il capo.
+
+**Gratis con ChatGPT**: nel visualizzatore tocca «Modifica con l'app ChatGPT». La foto originale va a ChatGPT e il prompt viene copiato: incollalo, salva il risultato e torna su ListLab con «Importa risultato».
 
 ## Come si usa
 La barra in basso ha tre schede: **AI**, **Home** e **Impostazioni**. L'app si apre su Home.

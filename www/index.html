@@ -73,13 +73,18 @@
   <section class="panel soon" aria-disabled="true">
     <div class="step"><h2>Modifica con AI (OpenAI)</h2><span class="pill">In arrivo</span></div>
     <p class="hint">Sfondi da studio e manichino invisibile generati dall'intelligenza artificiale. Serve la chiave OpenAI in Impostazioni; il capo resta identico, cambia solo lo sfondo.</p>
+    <div id="aiRefBox"></div>
+    <label class="toggle"><input type="checkbox" id="aiUseRef" checked> Usa la foto di riferimento stile</label>
     <div class="choices" id="aiEditModes">
-      <label class="choice"><input type="radio" name="aiEdit" value="studio-white" disabled checked><span><strong>Sfondo bianco da studio</strong><small>Fondo bianco pulito con ombra morbida</small></span></label>
+      <label class="choice"><input type="radio" name="aiEdit" value="wall-hanging" disabled checked><span><strong>Appeso al muro, luce naturale</strong><small>Scena reale: gruccia, muro bianco, ombra vera</small></span></label>
+      <label class="choice"><input type="radio" name="aiEdit" value="studio-white" disabled><span><strong>Sfondo bianco puro (e-commerce)</strong><small>Fondo #FFFFFF: può sembrare un ritaglio</small></span></label>
       <label class="choice"><input type="radio" name="aiEdit" value="neutral" disabled><span><strong>Sfondo neutro</strong><small>Grigio chiaro o beige uniforme</small></span></label>
       <label class="choice"><input type="radio" name="aiEdit" value="ghost-mannequin" disabled><span><strong>Manichino invisibile</strong><small>Il capo "indossato" senza persona</small></span></label>
       <label class="choice"><input type="radio" name="aiEdit" value="custom" disabled><span><strong>Istruzione libera</strong><small>Descrivi tu la modifica</small></span></label>
     </div>
     <textarea id="aiEditPrompt" placeholder="Es. togli le pieghe e metti uno sfondo grigio chiaro" disabled></textarea>
+    <label class="toggle"><input type="checkbox" id="aiVariants"> Genera 2 varianti e scegli la migliore</label>
+    <div class="ll-cost inline"><span>Costo stimato</span><strong id="aiCost">—</strong></div>
     <button class="btn primary" type="button" id="aiEditGo" disabled>Genera</button>
   </section>
 </main>
@@ -226,17 +231,18 @@
     <div class="row">
       <div class="field">
         <label class="label" for="imgModel">Modello immagini</label>
-        <input type="text" id="imgModel" autocomplete="off" spellcheck="false" placeholder="gpt-image-2">
+        <input type="text" id="imgModel" autocomplete="off" spellcheck="false" placeholder="gpt-image-2.5-sunburst">
       </div>
       <div class="field">
         <span class="label">Qualità</span>
         <div class="seg" id="imgQuality">
-          <button type="button" data-v="medium" aria-pressed="true">Media</button>
-          <button type="button" data-v="high" aria-pressed="false">Alta</button>
+          <button type="button" data-v="low" aria-pressed="false">Bozza</button>
+          <button type="button" data-v="medium" aria-pressed="false">Media</button>
+          <button type="button" data-v="high" aria-pressed="true">Alta</button>
         </div>
       </div>
     </div>
-    <span class="hint">Media costa circa 5–6 centesimi a foto, Alta circa 20. Le foto dei dettagli (etichette, difetti) non vengono mai modificate con l'AI.</span>
+    <span class="hint">Alta (consigliata) costa circa 0,22 $ a foto, Media circa 0,07 $. Bozza (circa 0,03 $) è solo un'anteprima veloce, di qualità bassa. Il costo stimato viene sempre mostrato prima di ogni invio. Le foto dei dettagli (etichette, difetti) non vengono mai modificate con l'AI.</span>
     <button class="btn primary" id="saveSettings" type="button">Salva impostazioni</button>
     <div class="status" id="settingsStatus" role="status"></div>
   </section>
@@ -288,12 +294,18 @@
   <div class="vbottom">
     <button class="vbtn" type="button" id="vRotate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg> Ruota</button>
     <button class="vbtn" type="button" id="vDelete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg> Elimina</button>
+    <div class="vrow">
+      <button class="vbtn" type="button" id="vChatgpt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6"/><path d="M18 3v4h-4M6 21v-4h4"/></svg> Modifica con l'app ChatGPT</button>
+      <button class="vbtn" type="button" id="vImport"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg> Importa risultato</button>
+    </div>
+    <div class="vmsg" id="vMsg" role="status"></div>
   </div>
 </div>
 
 <script src="errors.js"></script>
 <script src="enhance.js"></script>
 <script src="ai-images.js"></script>
+<script src="ai-ui.js"></script>
 <script src="presets.js"></script>
 <script src="quality.js"></script>
 <script src="guided-camera.js"></script>

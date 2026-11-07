@@ -113,9 +113,25 @@
       const r = document.querySelector('input[name="aiEdit"]:checked');
       const mode = r ? r.value : "studio-white", extra = $("aiEditPrompt").value;
       if (mode === "custom" && !extra.trim()) { status("Scrivi l'istruzione libera nel riquadro qui sopra.", true); return; }
-      run("L'AI sta modificando le foto (può volerci un minuto)", list => api.applyAiEdit(list, mode, extra));
+      const useRef = $("aiUseRef").checked && hasRef, n = $("aiVariants").checked ? 2 : 1;
+      run("L'AI sta modificando le foto (può volerci un minuto)", list => api.applyAiEdit(list, mode, extra, { useRef, n }));
     });
+    // foto di riferimento stile (salvata sul telefono, riusata per tutte le copertine)
+    let hasRef = false;
+    if (window.LLStyleRef) {
+      window.LLStyleRef.mount($("aiRefBox"));
+      const onRef = b => { hasRef = !!b; $("aiUseRef").closest("label").hidden = !b; updateCost(); };
+      window.LLStyleRef.get().then(onRef); window.LLStyleRef.onChange(onRef);
+    }
+    $("aiVariants").checked = !!(api.variants && api.variants());
+    $("aiVariants").addEventListener("change", () => { if (api.setVariants) api.setVariants($("aiVariants").checked); updateCost(); });
+    $("aiUseRef").addEventListener("change", updateCost);
+    function updateCost() {
+      if (!api.costText) return;
+      $("aiCost").textContent = api.costText($("aiVariants").checked ? 2 : 1, $("aiUseRef").checked && hasRef);
+    }
+    updateCost();
 
-    return { sync };
+    return { sync, updateCost: () => updateCost() };
   };
 })();

@@ -229,7 +229,10 @@
             <button type="button" data-act="mode" data-v="ai" aria-pressed="${aiOn}" ${hasOpenai ? "" : "disabled"}>Pulizia con AI</button>
             <button type="button" data-act="mode" data-v="local" aria-pressed="${!aiOn}">Solo sistemazione locale</button>
           </div>
-          <span class="hint">${hasOpenai ? (aiOn ? "Copertina da studio e sfondo pulito per fronte e retro con OpenAI (circa 15–20 centesimi in tutto). I dettagli restano foto reali." : "Gratis: luce, colori e ritaglio sul telefono, senza AI.") : "Per la pulizia con AI aggiungi la chiave OpenAI in Impostazioni. Intanto: sistemazione locale gratuita."}</span>
+          <span class="hint">${hasOpenai ? (aiOn ? "Copertina appesa al muro con luce naturale e sfondo pulito per fronte e retro con OpenAI, dalla foto originale a piena qualità. Prima di ogni invio vedi il costo stimato. I dettagli restano foto reali." : "Gratis: luce, colori e ritaglio sul telefono, senza AI.") : "Per la pulizia con AI aggiungi la chiave OpenAI in Impostazioni. Intanto: sistemazione locale gratuita."}</span>
+          ${aiOn && hasOpenai ? `<div id="gRefBox"></div>
+            <label class="toggle"><input type="checkbox" data-act="varopt" ${api.variants() ? "checked" : ""}> Copertina: genera 2 varianti e scegli la migliore</label>
+            <div class="ll-cost"><span>Copertina, costo stimato</span><strong id="gCoverCost"></strong></div>` : ""}
         </div>
         <h2 class="g-h">Scaletta di scatto</h2>
         ${ms.map((s, i) => stepCard(s, i, i === cur)).join("")}
@@ -243,6 +246,12 @@
           <div class="g-step-head"><span class="g-num">cm</span><div><strong>Misure (facoltative)</strong><small>Le metto nella descrizione.</small></div></div>
           <div class="g-mgrid">${p.measures.map(m => `<label><span>${esc(m.label)}</span><input type="number" inputmode="decimal" min="0" max="300" data-measure="${m.id}" value="${esc((api.getDetails().measures || {})[m.id] || "")}" placeholder="cm"></label>`).join("")}</div>
         </section>`;
+      const refHost = $g("gRefBox");
+      if (refHost && window.LLStyleRef) {
+        window.LLStyleRef.mount(refHost);
+        const upd = async () => { const el = $g("gCoverCost"); if (el) el.textContent = api.costText(api.variants() ? 2 : 1, (await api.styleRef()) ? 2 : 1); };
+        upd(); window.LLStyleRef.onChange(upd);
+      }
       const missing = ms.filter(s => s.status !== "ok").map(s => stepOf(s).short);
       $g("gFoot").innerHTML = `<button type="button" class="go" data-act="process" ${ok ? "" : "disabled"}>Elabora e crea l'annuncio</button>
         <span class="hint">${ok ? (running ? "Sto già elaborando le prime foto in sottofondo…" : "Puoi aggiungere dettagli prima di continuare.") : "Mancano: " + missing.join(", ")}</span>`;
@@ -272,7 +281,8 @@
       const c = await blobToCanvas(shot.blob, 1600);
       const jpg = await toBlob(c, "image/jpeg", 0.92);
       await setBlob(s.uid + ":orig", jpg);
-      await DB.del(s.uid + ":ai"); await DB.del(s.uid + ":prep");
+      await setBlob(s.uid + ":raw", shot.blob);            // originale integro: è quello che va all'AI
+      await DB.del(s.uid + ":ai"); await DB.del(s.uid + ":ai2"); await DB.del(s.uid + ":prep");
       canv.set(s.uid, c);
       Object.assign(s, { status: "checking", issues: [], accepted: false, framing: null, ai: "none", aiErr: "", choice: null, proc: "idle", at: Date.now(), box: null, tilt: null });
       delete G.reviewed[s.uid];
@@ -358,18 +368,47 @@ Rispondi SOLO con JSON: {"capo":true,"box":[x0,y0,x1,y1],"tagliato":false,"dove"
         await setBlob(s.uid + ":prep", await toBlob(input, "image/jpeg", 0.92));
       }
       if (s.kind === "main" && st.ai && G.mode === "ai" && api.keys().openai) {
-        s.ai = "working"; s.phase = s.step === "cover" ? "Creo la copertina da studio con l'AI" : "Tolgo il disordine con l'AI"; render();
-        try {
-          const out = await api.aiEdit(await toBlob(input, "image/jpeg", 0.92), st.ai);
-          await setBlob(s.uid + ":ai", out);
-          s.ai = "done"; s.choice = s.choice || "ai"; s.aiErr = "";
-        } catch (e) {
-          s.ai = "error"; s.aiErr = e.message || "Modifica non riuscita"; s.choice = "local";
-        }
+        const ok = await runAi(s);
+        if (!ok) s.choice = "local";
       } else {
         s.choice = "local";
       }
       s.proc = "done"; s.phase = "";
+    }
+
+    // invio a OpenAI della foto ORIGINALE (a piena risoluzione), con riferimento stile e varianti per la copertina
+    let askChain = Promise.resolve();
+    function askCost(s, n, images) {
+      // una domanda alla volta, anche se le foto si elaborano in parallelo
+      const p = askChain.then(async () => {
+        if (G.costOk) return true;
+        const what = (s.step === "cover" ? "Copertina" : stepOf(s).short) + " con AI";
+        const r = await api.confirmAi(what, n, images);
+        if (r.ok && r.remember) { G.costOk = true; save(); }
+        return r.ok;
+      });
+      askChain = p.catch(() => {});
+      return p;
+    }
+    async function runAi(s) {
+      const st = stepOf(s), cover = s.step === "cover";
+      const raw = await DB.get(s.uid + ":raw") || await DB.get(s.uid + ":orig");
+      const reference = cover ? await api.styleRef() : null;
+      const n = cover && api.variants() ? 2 : 1;
+      s.phase = "In attesa di conferma del costo"; render();
+      if (!await askCost(s, n, reference ? 2 : 1)) { s.ai = "skipped"; s.aiErr = ""; return false; }
+      s.ai = "working"; s.phase = cover ? "Creo la copertina con l'AI" : "Tolgo il disordine con l'AI"; render();
+      try {
+        const outs = await api.aiEdit(raw, st.ai, { reference, n });
+        await setBlob(s.uid + ":ai", outs[0]);
+        if (outs[1]) await setBlob(s.uid + ":ai2", outs[1]); else await DB.del(s.uid + ":ai2");
+        s.variants = outs.length; s.pick = 1;
+        s.ai = "done"; s.choice = "ai"; s.aiErr = "";
+        return true;
+      } catch (e) {
+        s.ai = "error"; s.aiErr = e.message || "Modifica non riuscita";
+        return false;
+      }
     }
 
     // ---------- 3. elaborazione ----------
@@ -383,7 +422,7 @@ Rispondi SOLO con JSON: {"capo":true,"box":[x0,y0,x1,y1],"tagliato":false,"dove"
         <p class="g-lead">${G.mode === "ai" ? "Raddrizzo, ritaglio e pulisco le foto. La copertina diventa una foto da studio." : "Sistemo luce, colori e ritaglio sul telefono."} I dettagli restano foto reali.</p>
         <ul class="g-plist">${list.map((s, i) => { const st = stepOf(s), w = s.proc === "working" || s.proc === "queued";
           return `<li class="${w ? "working" : ""}${s.proc === "done" ? " done" : ""}"><span class="g-pthumb">${thumbHtml(s, "")}<i class="ring" aria-hidden="true"></i></span>
-            <div><strong>${i + 1}. ${esc(st.short || st.title)}</strong><small>${esc(s.proc === "done" ? (s.ai === "done" ? "Pronta con AI ✦" : s.ai === "error" ? "AI non riuscita: " + s.aiErr + " – uso la sistemazione locale" : "Pronta") : s.proc === "working" ? (s.phase || "In lavorazione…") : "In coda")}</small></div></li>`; }).join("")}
+            <div><strong>${i + 1}. ${esc(st.short || st.title)}</strong><small>${esc(s.proc === "done" ? (s.ai === "done" ? "Pronta con AI ✦" + (s.variants > 1 ? " (2 varianti)" : "") : s.ai === "error" ? "AI non riuscita: " + s.aiErr + " – uso la sistemazione locale" : s.ai === "skipped" ? "Pronta (senza AI)" : "Pronta") : s.proc === "working" ? (s.phase || "In lavorazione…") : "In coda")}</small></div></li>`; }).join("")}
           ${labels ? `<li class="${G.labelsState === "working" ? "working" : G.labelsState === "done" ? "done" : ""}"><span class="g-pthumb g-picon">🏷️<i class="ring"></i></span>
             <div><strong>Lettura etichette</strong><small>${esc(labelSummary())}</small></div></li>` : ""}
           <li class="${G.writing ? "working" : G.textDone ? "done" : ""}"><span class="g-pthumb g-picon">✍️<i class="ring"></i></span>
@@ -446,17 +485,20 @@ Usa "" per ciò che non è leggibile.`, 300);
       const list = G.shots.filter(s => s.ai === "done" || (s.ai === "working" && !G.reviewed[s.uid]));
       const s = list.find(x => !G.reviewed[x.uid]) || list[0];
       if (!s) { finalize(); return; }
-      const i = list.indexOf(s), st = stepOf(s), before = s.step === "cover" ? s.uid + ":orig" : s.uid + ":prep";
+      const i = list.indexOf(s), st = stepOf(s), before = s.uid + ":orig", after = s.uid + (s.pick === 2 ? ":ai2" : ":ai");
       $g("gBody").innerHTML = `<h2 class="g-h">Prima / dopo <small>${i + 1} di ${list.length}</small></h2>
         <p class="g-lead">${esc(st.title)}: trascina la linea per confrontare. Controlla che il capo sia identico (colore, bottoni, difetti).</p>
         <div class="g-cmp${s.ai === "working" ? " working" : ""}" id="gCmp" style="--x:50%">
           <img data-k="${before}" alt="Prima">
-          <div class="g-after"><img data-k="${s.uid}:ai" alt="Dopo"></div>
+          <div class="g-after"><img data-k="${after}" alt="Dopo"></div>
           <span class="g-tag l">Prima</span><span class="g-tag r">Dopo · AI</span>
           <div class="g-handle" aria-hidden="true"><span></span></div>
           <i class="ring" aria-hidden="true"></i>
         </div>
-        <input type="range" min="0" max="100" value="50" id="gCmpRange" aria-label="Confronto prima e dopo">`;
+        <input type="range" min="0" max="100" value="50" id="gCmpRange" aria-label="Confronto prima e dopo">
+        ${s.variants > 1 ? `<div class="g-vseg"><div class="seg" role="group" aria-label="Variante">
+          <button type="button" data-act="variant" data-v="1" data-uid="${s.uid}" aria-pressed="${s.pick !== 2}">Variante 1</button>
+          <button type="button" data-act="variant" data-v="2" data-uid="${s.uid}" aria-pressed="${s.pick === 2}">Variante 2</button></div></div>` : ""}`;
       $g("gFoot").innerHTML = `<div class="g-rev">
           <button type="button" class="btn" data-act="keeporig" data-uid="${s.uid}">Tieni l'originale</button>
           <button type="button" class="btn" data-act="redoai" data-uid="${s.uid}" ${s.ai === "working" ? "disabled" : ""}>Rifai</button>
@@ -470,12 +512,16 @@ Usa "" per ciò che non è leggibile.`, 300);
       cmp.addEventListener("pointermove", e => { if (e.buttons || e.pointerType === "touch") drag(e); });
     }
     async function redoAi(s) {
-      s.ai = "working"; render();
-      try {
-        const input = await DB.get(s.step === "cover" ? s.uid + ":orig" : s.uid + ":prep");
-        const out = await api.aiEdit(input, stepOf(s).ai);
-        await setBlob(s.uid + ":ai", out); s.ai = "done";
-      } catch (e) { s.ai = "done"; toast(e.message || "Non riuscito, riprova."); }
+      const had = { variants: s.variants, pick: s.pick };
+      const keep = await DB.get(s.uid + ":ai"), keep2 = await DB.get(s.uid + ":ai2");
+      const prevCostOk = G.costOk; G.costOk = false;          // «Rifai» chiede sempre conferma del costo
+      const ok = await runAi(s);
+      G.costOk = prevCostOk;
+      if (!ok) {   // annullato o non riuscito: resta il risultato di prima
+        if (s.ai === "error") toast(s.aiErr || "Non riuscito, riprova.");
+        await setBlob(s.uid + ":ai", keep); if (keep2) await setBlob(s.uid + ":ai2", keep2);
+        Object.assign(s, had, { ai: "done", choice: "ai" });
+      }
       save(); render();
     }
 
@@ -487,11 +533,11 @@ Usa "" per ciò che non è leggibile.`, 300);
         const list = finalOrder(), entries = [];
         for (const s of list) {
           const st = stepOf(s);
-          const useAi = s.choice === "ai" && await DB.get(s.uid + ":ai");
-          const main = await DB.get(resultKey(Object.assign({}, s, { choice: useAi ? "ai" : "local" })));
+          const useAi = s.choice === "ai" && await DB.get(s.uid + (s.pick === 2 ? ":ai2" : ":ai"));
+          const main = useAi || await DB.get(resultKey(Object.assign({}, s, { choice: "local" })));
           const orig = await DB.get(s.uid + ":orig");
           entries.push({
-            blob: main || orig, origBlob: useAi ? (s.step === "cover" ? orig : await DB.get(s.uid + ":prep")) : null,
+            blob: main || orig, origBlob: useAi ? orig : null, rawBlob: await DB.get(s.uid + ":raw"),
             name: (st.short || st.title || "foto").toLowerCase().replace(/\W+/g, "-") + ".jpg",
             ai: !!useAi, step: s.kind === "main" ? s.step : "detail:" + s.type,
             box: !useAi && s.kind === "main" && s.step === "cover" ? s.box : null,
@@ -567,6 +613,8 @@ Usa "" per ciò che non è leggibile.`, 300);
         case "remove": if (s) { G.shots = G.shots.filter(x => x !== s); ["orig", "ai", "prep"].forEach(k => DB.del(s.uid + ":" + k)); save(); render(); } break;
         case "process": startProcess(); break;
         case "back": G.stage = "steps"; save(); render(); break;
+        case "variant": if (s) { s.pick = Number(b.dataset.v); save(); render(); } break;
+        case "varopt": api.setVariants(b.checked); render(); break;
         case "useai": if (s) { s.choice = "ai"; G.reviewed[s.uid] = true; save(); next(); } break;
         case "keeporig": if (s) { s.choice = "local"; G.reviewed[s.uid] = true; save(); next(); } break;
         case "redoai": if (s) redoAi(s); break;
