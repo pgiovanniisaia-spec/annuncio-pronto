@@ -8,10 +8,28 @@ const S = { items: [], cat: "Scarpe", tone: "amichevole", fmt: "34", writing: fa
 let nextId = 1;
 
 // ---------- plugin nativi (Capacitor) ----------
+// Senza bundler window.Capacitor arriva dal ponte nativo, che espone i plugin in
+// Capacitor.Plugins e NON ha registerPlugin: lo usiamo solo se c'è. Un plugin
+// mancante non deve mai bloccare il resto dell'app.
 const Cap = window.Capacitor;
-const native = !!(Cap && Cap.isNativePlatform && Cap.isNativePlatform());
-const Filesystem = native ? Cap.registerPlugin("Filesystem") : null;
-const Share = native ? Cap.registerPlugin("Share") : null;
+let native = false;
+try { native = !!(Cap && typeof Cap.isNativePlatform === "function" && Cap.isNativePlatform()); } catch (_) {}
+function plugin(name) {
+  if (!native) return null;
+  try {
+    const p = Cap.Plugins && Cap.Plugins[name];
+    if (p) return p;
+    if (typeof Cap.registerPlugin === "function") return Cap.registerPlugin(name);
+  } catch (e) { console.warn("Plugin " + name + " non disponibile", e); }
+  return null;
+}
+const Filesystem = plugin("Filesystem");
+const Share = plugin("Share");
+// esegue un pezzo di inizializzazione: se fallisce lo segnala ma l'app va avanti
+function on(id, fn) { section(id, () => { $(id).onclick = fn; }); }
+function section(name, fn) {
+  try { fn(); } catch (e) { if (window.apReportError) window.apReportError(`Avvio (${name}): ${e && e.message || e}`, e); else console.error(e); }
+}
 
 // ---------- impostazioni ----------
 const store = {
@@ -28,6 +46,7 @@ function seg(id, onPick) {
     segSet(id, b.dataset.v); onPick(b.dataset.v);
   });
 }
+section("impostazioni", () => {
 $("openSettings").onclick = () => {
   const p = $("settings"); p.hidden = !p.hidden;
   if (!p.hidden) { $("apiKey").value = apiKey; segSet("model", model); p.scrollIntoView({ block: "start" }); }
@@ -41,12 +60,15 @@ $("saveSettings").onclick = () => {
   setStatus(apiKey ? "Impostazioni salvate." : "Impostazioni salvate. Senza chiave preparo solo una bozza semplice.");
 };
 if (!apiKey) $("settings").hidden = false;
+});
 
+section("dettagli", () => {
 const sizeHints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
 seg("cat", v => { S.cat = v; $("size").placeholder = sizeHints[v]; });
 seg("tone", v => { S.tone = v; });
 seg("fmt", v => { S.fmt = v; $("grid").classList.toggle("square", v === "11"); rerenderAll(); });
 $("whiten").addEventListener("change", rerenderAll);
+});
 
 function setStatus(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
 
@@ -79,16 +101,20 @@ function pump() { while (active < 3 && queue.length) { active++; queue.shift()()
 
 // ---------- aggiunta foto ----------
 const drop = $("drop"), fileInput = $("file");
+section("foto", () => {
 drop.addEventListener("click", () => fileInput.click());
 ["dragover", "dragenter"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach(t => drop.addEventListener(t, () => drop.classList.remove("over")));
 drop.addEventListener("drop", e => { e.preventDefault(); addFiles(e.dataTransfer.files); });
 fileInput.addEventListener("change", () => { const f = [...(fileInput.files || [])]; fileInput.value = ""; addFiles(f); });
+});
 
 function addFiles(list) {
-  // Su Android il selettore spesso restituisce file senza tipo né estensione: li accettiamo e
-  // lasciamo decidere alla decodifica.
-  const files = [...list].filter(f => !f.type || f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name || ""));
+  // Su Android il selettore spesso restituisce file senza tipo, o con tipo generico
+  // "application/octet-stream", e senza estensione: li accettiamo e lasciamo decidere
+  // alla decodifica. Scartiamo solo ciò che è sicuramente altro (video, testo, PDF…).
+  const files = [...list].filter(f => !f.type || f.type.startsWith("image/") || f.type === "application/octet-stream" ||
+    /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(f.name || ""));
   if (!files.length) { setStatus("Nessuna foto ricevuta. Riprova scegliendo dalla Galleria.", true); return; }
   let skipped = 0;
   $("status").classList.remove("err");
@@ -284,8 +310,8 @@ async function writeAll(directory, folder) {
   }
   return uris;
 }
-$("shareAll").onclick = async () => {
-  if (!native) return browserDownload();
+on("shareAll", async () => {
+  if (!native || !Filesystem || !Share) return browserDownload();
   try {
     setStatus("Preparo le foto…");
     const files = await writeAll("CACHE", "condividi");
@@ -295,15 +321,15 @@ $("shareAll").onclick = async () => {
     if (!/cancel/i.test(String(e && e.message))) setStatus("Condivisione non riuscita. Prova «Salva nel telefono».", true);
     else refresh();
   }
-};
-$("saveAll").onclick = async () => {
-  if (!native) return browserDownload();
+});
+on("saveAll", async () => {
+  if (!native || !Filesystem) return browserDownload();
   try {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
     await writeAll("DOCUMENTS", `AnnuncioPronto/${stamp}`);
     setStatus(`Foto salvate in Documenti › AnnuncioPronto › ${stamp}`);
   } catch (_) { setStatus("Salvataggio non riuscito. Usa «Condividi tutte» e scegli Google Foto o File.", true); }
-};
+});
 async function browserDownload() {
   const blobs = (await Promise.all(S.items.map(i => i.outPromise))).filter(Boolean);
   blobs.forEach((b, i) => {
@@ -393,7 +419,7 @@ function fallbackText() {
   };
 }
 
-$("go").onclick = async () => {
+on("go", async () => {
   if (S.writing || !S.items.length) return;
   const ready = S.items.filter(i => i.src).slice(0, AI_PHOTOS);
   if (!ready.length) { setStatus("Aspetta che le foto siano pronte.", true); return; }
@@ -420,7 +446,7 @@ $("go").onclick = async () => {
   if (note) setStatus(note, true); else { setStatus("Fatto. Condividi le foto e copia il testo su Vinted."); }
   $("go").disabled = false; $("go").textContent = "Riscrivi l'annuncio";
   $("reset").hidden = false;
-};
+});
 
 function mkBtn(text, fn, cls) { const b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (cls ? " " + cls : ""); b.textContent = text; b.onclick = fn; return b; }
 const fullText = t => `${t.titolo}\n\n${t.descrizione}\n\n${(t.hashtag || []).join(" ")}`.trim();
@@ -554,10 +580,10 @@ function openHistory(id) {
   renderText(t, e.id, e.date);
   $("resText").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
-renderHistory();
+section("storico", renderHistory);
 
 // ---------- nuovo annuncio ----------
-$("reset").onclick = () => {
+on("reset", () => {
   const b = $("reset");
   if (b.dataset.sure !== "1") {
     b.dataset.sure = "1"; b.textContent = "Tocca di nuovo per svuotare tutto";
@@ -574,5 +600,5 @@ $("reset").onclick = () => {
   $("status").classList.remove("err");
   refresh();
   window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-};
+});
 })();

@@ -7,6 +7,7 @@ App Android (Capacitor 7) che sistema le foto per Vinted e scrive titolo, descri
   - `index.html`, `style.css`, `app.js` — interfaccia e logica.
   - `enhance.js` — correzione foto (usata sia dalla pagina sia dal worker).
   - `worker.js` — Web Worker che applica `enhancePixels` senza bloccare lo schermo.
+  - `errors.js` — riquadro errori in fondo allo schermo (caricato prima di `app.js`).
 - `capacitor.config.json` — appId `it.annunciopronto.app`, `CapacitorHttp` attivo (le chiamate `fetch` all'API passano dal lato nativo, niente problemi CORS).
 - `assets/icon.png` — icona sorgente 1024×1024 per `@capacitor/assets`.
 - La cartella `android/` NON è inclusa: va generata (vedi sotto).
@@ -30,6 +31,12 @@ Se la versione 7 di Capacitor non è più l'ultima, va bene restare sulla 7; agg
 ## Permessi Android
 - Fotocamera e galleria passano dal selettore file della WebView: non servono permessi extra.
 - `Filesystem` scrive in Documenti/AnnuncioPronto e nella cache per la condivisione. Se su qualche versione di Android il salvataggio fallisce, la soluzione preferita è salvare in `Pictures/AnnuncioPronto` tramite MediaStore (plugin nativo piccolo o `@capacitor-community/media`), così le foto compaiono nella Galleria.
+
+## Plugin senza bundler
+`window.Capacitor` arriva dal ponte nativo: espone i plugin in `Capacitor.Plugins.Nome` e NON ha `registerPlugin` (che esiste solo importando `@capacitor/core` con un bundler). In `app.js` i plugin si prendono con `plugin("Nome")`, che restituisce `null` se mancano: un plugin assente non deve mai fermare l'app.
+
+## Firma dell'APK
+Il workflow mette il secret `DEBUG_KEYSTORE_BASE64` in `~/.android/debug.keystore` (password `android`, alias `androiddebugkey`), così tutte le build hanno la stessa firma e si installano sopra le precedenti.
 
 ## Prova nel browser
 `npm run serve` e apri http://localhost:8080 — la sistemazione foto funziona; condividi/salva scaricano i file.

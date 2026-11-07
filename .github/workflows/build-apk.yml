@@ -23,6 +23,22 @@ jobs:
       - name: Android SDK (già presente sul runner)
         run: echo "sdk.dir=$ANDROID_HOME" && yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
+      # Firma fissa: Gradle firma le build di debug con ~/.android/debug.keystore
+      # (password "android", alias "androiddebugkey"). Se il secret c'è, mettiamo lì
+      # sempre lo stesso keystore, così ogni nuovo APK si installa sopra il precedente.
+      - name: Keystore di debug fisso
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            mkdir -p ~/.android
+            echo "$DEBUG_KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > ~/.android/debug.keystore
+            keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey > /dev/null
+            echo "Uso il keystore fisso dal secret DEBUG_KEYSTORE_BASE64."
+          else
+            echo "::warning::Secret DEBUG_KEYSTORE_BASE64 assente: l'APK avrà una firma casuale e andrà disinstallata la versione precedente."
+          fi
+
       - name: Installa dipendenze
         run: npm install
 
