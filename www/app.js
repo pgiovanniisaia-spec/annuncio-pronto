@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const MAX = 20;          // foto per annuncio, come Vinted
 const AI_PHOTOS = 5;     // foto inviate a Claude (le prime)
 const WORK_SIDE = 1500;  // larghezza di decodifica della copia di lavoro
-const S = { items: [], cat: "Scarpe", tone: "amichevole", fmt: "34", writing: false, text: null };
+const S = { items: [], cat: "Scarpe", tone: "amichevole", fmt: "34", writing: false, text: null, histId: null };
 let nextId = 1;
 
 // ---------- plugin nativi (Capacitor) ----------
@@ -412,20 +412,31 @@ $("go").onclick = async () => {
     ai.box.forEach((b, i) => { const it = ready[i]; if (it && S.items.includes(it)) { it.box = b; it.boxRot = it.rot; enqueue(() => renderItem(it)); } });
   }
   const text = ai && ai.titolo && ai.descrizione ? ai : fallbackText();
-  S.text = text; renderText(text);
+  S.text = text;
+  S.histId = saveHistory(text, S.histId);
+  renderText(text, S.histId);
   S.writing = false;
   $("status").classList.remove("err");
   if (note) setStatus(note, true); else { setStatus("Fatto. Condividi le foto e copia il testo su Vinted."); }
   $("go").disabled = false; $("go").textContent = "Riscrivi l'annuncio";
+  $("reset").hidden = false;
 };
 
 function mkBtn(text, fn, cls) { const b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (cls ? " " + cls : ""); b.textContent = text; b.onclick = fn; return b; }
-function renderText(t) {
+const fullText = t => `${t.titolo}\n\n${t.descrizione}\n\n${(t.hashtag || []).join(" ")}`.trim();
+
+// Mostra l'annuncio. Titolo e descrizione si possono modificare: le modifiche
+// valgono per i pulsanti «Copia» e vengono salvate nello storico (histId).
+function renderText(t, histId, fromHistory) {
   const o = $("out"); o.innerHTML = "";
   const head = document.createElement("div"); head.className = "outhead";
-  const l = document.createElement("span"); l.className = "label"; l.textContent = "Annuncio";
-  head.append(l, mkBtn("Copia tutto", e => copy(`${t.titolo}\n\n${t.descrizione}\n\n${(t.hashtag || []).join(" ")}`, e.target), "primary"));
-  o.append(head, block("Titolo", t.titolo, "outtitle"), block("Descrizione", t.descrizione, "outtext"));
+  const l = document.createElement("span"); l.className = "label";
+  l.textContent = fromHistory ? `Annuncio del ${fmtDate(fromHistory)}` : "Annuncio";
+  head.append(l, mkBtn("Copia tutto", e => copy(fullText(t), e.target), "primary"));
+  const onEdit = () => saveHistoryEditSoon(histId, t);
+  o.append(head,
+    block("Titolo", t, "titolo", "outtitle", onEdit),
+    block("Descrizione", t, "descrizione", "outtext", onEdit));
   if (t.hashtag && t.hashtag.length) {
     const b = document.createElement("div"); b.className = "outblock";
     const h = document.createElement("div"); h.className = "outhead";
@@ -442,14 +453,20 @@ function renderText(t) {
     t.controlli.forEach(x => { const li = document.createElement("li"); li.textContent = x; ul.append(li); });
     c.append(s, ul); o.append(c);
   }
+  const hint = document.createElement("span"); hint.className = "hint";
+  hint.textContent = "Puoi toccare titolo e descrizione per correggerli prima di copiarli.";
+  o.append(hint);
 }
-function block(label, text, cls) {
+function block(label, t, key, cls, onEdit) {
   const b = document.createElement("div"); b.className = "outblock";
   const h = document.createElement("div"); h.className = "outhead";
   const l = document.createElement("span"); l.className = "label"; l.textContent = label;
-  h.append(l, mkBtn("Copia", e => copy(text, e.target)));
-  const p = document.createElement(cls === "outtitle" ? "div" : "p"); p.className = cls; p.textContent = text;
-  b.append(h, p); return b;
+  h.append(l, mkBtn("Copia", e => copy(t[key], e.target)));
+  const f = document.createElement("textarea"); f.className = "edit " + cls; f.value = t[key];
+  f.rows = 1; f.setAttribute("aria-label", label); f.spellcheck = true;
+  const fit = () => { f.style.height = "auto"; f.style.height = f.scrollHeight + 2 + "px"; };
+  f.addEventListener("input", () => { t[key] = key === "titolo" ? f.value.replace(/\n/g, " ") : f.value; fit(); onEdit(); });
+  b.append(h, f); requestAnimationFrame(fit); return b;
 }
 async function copy(text, el) {
   const old = el.textContent;
@@ -461,4 +478,101 @@ async function copy(text, el) {
   }
   setTimeout(() => { el.textContent = old; el.classList.remove("ok"); }, 1500);
 }
+
+// ---------- storico annunci (salvato sul telefono) ----------
+const HIST_KEY = "ap_history", HIST_MAX = 40;
+function loadHistory() { try { const a = JSON.parse(store.get(HIST_KEY, "[]")); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
+function writeHistory(list) {
+  // se lo spazio finisce, togliamo i più vecchi finché ci sta
+  for (let l = list.slice(0, HIST_MAX); ; l = l.slice(0, -1)) {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(l)); return; } catch (_) { if (!l.length) return; }
+  }
+}
+function coverThumb() {
+  const it = S.items.find(i => i.cv && i.el.classList.contains("has-img"));
+  if (!it) return "";
+  const c = document.createElement("canvas"); c.width = 96; c.height = Math.round(96 * it.cv.height / it.cv.width);
+  try { c.getContext("2d").drawImage(it.proc || it.cv, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } catch (_) { return ""; }
+}
+function saveHistory(t, id) {
+  const list = loadHistory();
+  const entry = {
+    id: id || Date.now(), date: Date.now(), cat: S.cat,
+    titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag || [], controlli: t.controlli || [],
+    thumb: coverThumb()
+  };
+  writeHistory([entry, ...list.filter(e => e.id !== entry.id)]);
+  renderHistory();
+  return entry.id;
+}
+let editTimer = 0;
+function saveHistoryEditSoon(id, t) {
+  if (!id) return;
+  clearTimeout(editTimer);
+  editTimer = setTimeout(() => {
+    const list = loadHistory(), e = list.find(x => x.id === id);
+    if (!e) return;
+    e.titolo = t.titolo; e.descrizione = t.descrizione;
+    writeHistory(list); renderHistory();
+  }, 400);
+}
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+}
+function renderHistory() {
+  const list = loadHistory(), ul = $("histList");
+  $("history").hidden = !list.length;
+  $("histCount").textContent = list.length ? String(list.length) : "";
+  ul.innerHTML = "";
+  for (const e of list) {
+    const li = document.createElement("li");
+    const open = document.createElement("button"); open.type = "button"; open.className = "histopen";
+    const im = document.createElement(e.thumb ? "img" : "span"); im.className = "histthumb";
+    if (e.thumb) { im.src = e.thumb; im.alt = ""; }
+    const txt = document.createElement("span"); txt.className = "histtxt";
+    const ti = document.createElement("strong"); ti.textContent = e.titolo || "Senza titolo";
+    const me = document.createElement("span"); me.className = "hint"; me.textContent = `${e.cat || ""} · ${fmtDate(e.date)}`;
+    txt.append(ti, me); open.append(im, txt);
+    open.onclick = () => openHistory(e.id);
+    const del = document.createElement("button"); del.type = "button"; del.className = "btn small histdel"; del.textContent = "Elimina";
+    del.onclick = () => {
+      if (del.dataset.sure !== "1") { del.dataset.sure = "1"; del.textContent = "Sicuro?"; setTimeout(() => { del.dataset.sure = ""; del.textContent = "Elimina"; }, 2500); return; }
+      writeHistory(loadHistory().filter(x => x.id !== e.id));
+      if (S.histId === e.id) S.histId = null;
+      renderHistory();
+    };
+    li.append(open, del); ul.append(li);
+  }
+}
+function openHistory(id) {
+  const e = loadHistory().find(x => x.id === id);
+  if (!e) return;
+  const t = { titolo: e.titolo, descrizione: e.descrizione, hashtag: e.hashtag, controlli: [] };
+  $("resText").hidden = false;
+  $("resText").classList.remove("show"); void $("resText").offsetWidth; $("resText").classList.add("show");
+  renderText(t, e.id, e.date);
+  $("resText").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+renderHistory();
+
+// ---------- nuovo annuncio ----------
+$("reset").onclick = () => {
+  const b = $("reset");
+  if (b.dataset.sure !== "1") {
+    b.dataset.sure = "1"; b.textContent = "Tocca di nuovo per svuotare tutto";
+    setTimeout(() => { b.dataset.sure = ""; b.textContent = "+ Nuovo annuncio"; }, 3000);
+    return;
+  }
+  b.dataset.sure = ""; b.textContent = "+ Nuovo annuncio"; b.hidden = true;
+  S.items.forEach(it => { it.ver++; it.el.remove(); });
+  S.items = []; S.text = null; S.histId = null;
+  ["brand", "size", "notes"].forEach(id => { $(id).value = ""; });
+  $("cond").value = "Ottime condizioni";
+  $("resText").hidden = true; $("out").innerHTML = "";
+  $("go").textContent = "Scrivi l'annuncio";
+  $("status").classList.remove("err");
+  refresh();
+  window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+};
 })();

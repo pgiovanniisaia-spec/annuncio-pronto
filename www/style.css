@@ -108,3 +108,19 @@ textarea{resize:vertical;min-height:70px}
 .count{display:inline-block}
 .tile.failed{outline:2px solid var(--warn)}
 .btn.ok{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* testo modificabile */
+.edit{width:100%;font:inherit;color:var(--fg);background:transparent;border:1px solid transparent;border-radius:8px;padding:4px 6px;margin:0 -6px;resize:none;overflow:hidden;min-height:0;width:calc(100% + 12px)}
+.edit:hover,.edit:focus{border-color:var(--line);background:var(--bg)}
+textarea.outtitle{font-family:var(--display);font-weight:600;font-size:20px;line-height:1.25}
+textarea.outtext{font-size:15px;line-height:1.5}
+#reset{width:100%}
+
+/* storico */
+.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.hist li{display:flex;align-items:center;gap:8px}
+.histopen{flex:1;min-width:0;display:flex;align-items:center;gap:10px;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px;text-align:left;cursor:pointer}
+.histthumb{flex:none;width:42px;height:56px;border-radius:6px;object-fit:cover;background:var(--tag);display:block}
+.histtxt{display:flex;flex-direction:column;min-width:0}
+.histtxt strong{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.histdel{flex:none}
