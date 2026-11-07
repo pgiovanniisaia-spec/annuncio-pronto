@@ -2,7 +2,7 @@
   "name": "capacitor-gallery-saver",
   "version": "1.0.0",
   "private": true,
-  "description": "Plugin Capacitor minimo: salva immagini nella Galleria (Pictures/AnnuncioPronto/...) tramite MediaStore.",
+  "description": "Plugin Capacitor minimo: salva immagini nella Galleria (Pictures/<nome app>/...) tramite MediaStore.",
   "files": ["android/src/main/", "android/build.gradle"],
   "capacitor": {
     "android": { "src": "android" }

@@ -22,7 +22,7 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 
 /**
- * Salva una foto JPEG nella Galleria, in Pictures/AnnuncioPronto/<cartella>/<nome>.
+ * Salva una foto JPEG nella Galleria, in Pictures/<root>/<cartella>/<nome> (root = nome dell'app, da JS).
  * Android 10+: MediaStore, nessun permesso. Android 6-9: file + scansione, con permesso di scrittura.
  * "time" (millisecondi) diventa la data dello scatto: con date crescenti la Galleria
  * mostra le foto nello stesso ordine della griglia.
@@ -33,7 +33,7 @@ import java.io.OutputStream;
 )
 public class GallerySaverPlugin extends Plugin {
 
-    private static final String ROOT = "AnnuncioPronto";
+    private static final String DEFAULT_ROOT = "ListLab";
 
     @PluginMethod
     public void saveImage(PluginCall call) {
@@ -66,6 +66,7 @@ public class GallerySaverPlugin extends Plugin {
             call.reject("Nessuna immagine");
             return;
         }
+        String root = clean(call.getString("root"), DEFAULT_ROOT);
         String folder = clean(call.getString("folder"), "Annuncio");
         String fileName = clean(call.getString("fileName"), "foto.jpg");
         long time = call.getData().optLong("time", 0);
@@ -77,25 +78,25 @@ public class GallerySaverPlugin extends Plugin {
             byte[] bytes = Base64.decode(data, Base64.DEFAULT);
             String uri;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                uri = saveMediaStore(bytes, folder, fileName, time);
+                uri = saveMediaStore(bytes, root, folder, fileName, time);
             } else {
-                uri = saveLegacy(bytes, folder, fileName, time);
+                uri = saveLegacy(bytes, root, folder, fileName, time);
             }
             JSObject ret = new JSObject();
             ret.put("uri", uri);
-            ret.put("path", Environment.DIRECTORY_PICTURES + "/" + ROOT + "/" + folder + "/" + fileName);
+            ret.put("path", Environment.DIRECTORY_PICTURES + "/" + root + "/" + folder + "/" + fileName);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Salvataggio nella Galleria non riuscito: " + e.getMessage(), e);
         }
     }
 
-    private String saveMediaStore(byte[] bytes, String folder, String fileName, long time) throws Exception {
+    private String saveMediaStore(byte[] bytes, String root, String folder, String fileName, long time) throws Exception {
         ContentResolver resolver = getContext().getContentResolver();
         ContentValues v = new ContentValues();
         v.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
         v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-        v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + ROOT + "/" + folder);
+        v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + root + "/" + folder);
         v.put(MediaStore.Images.Media.DATE_TAKEN, time);
         v.put(MediaStore.Images.Media.DATE_ADDED, time / 1000);
         v.put(MediaStore.Images.Media.DATE_MODIFIED, time / 1000);
@@ -118,8 +119,8 @@ public class GallerySaverPlugin extends Plugin {
     }
 
     @SuppressWarnings("deprecation")
-    private String saveLegacy(byte[] bytes, String folder, String fileName, long time) throws Exception {
-        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), ROOT + "/" + folder);
+    private String saveLegacy(byte[] bytes, String root, String folder, String fileName, long time) throws Exception {
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), root + "/" + folder);
         if (!dir.exists() && !dir.mkdirs()) throw new Exception("impossibile creare la cartella");
         File f = new File(dir, fileName);
         try (FileOutputStream os = new FileOutputStream(f)) {

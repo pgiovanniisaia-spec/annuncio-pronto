@@ -1,11 +1,15 @@
 (() => {
 "use strict";
+// Nome dell'app: è l'UNICO punto del codice web dove compare. Tutta l'interfaccia lo prende da qui.
+const APP_NAME = "ListLab";
+const APP_VERSION = "2.0";
 const $ = id => document.getElementById(id);
 const MAX = 20;          // foto per annuncio, come Vinted
 const AI_PHOTOS = 5;     // foto inviate a Claude (le prime)
 const WORK_SIDE = 1500;  // larghezza di decodifica della copia di lavoro
 const S = { items: [], cat: "Scarpe", tone: "amichevole", fmt: "34", writing: false, text: null, histId: null };
 let nextId = 1;
+let viewer = null, studio = null;   // creati più in basso (viewer.js, studio.js)
 
 // ---------- plugin nativi (Capacitor) ----------
 // Senza bundler window.Capacitor arriva dal ponte nativo, che espone i plugin in
@@ -26,11 +30,25 @@ function plugin(name) {
 const Filesystem = plugin("Filesystem");
 const Share = plugin("Share");
 const Gallery = plugin("GallerySaver");   // plugin locale: plugins/gallery-saver
+const Haptics = plugin("Haptics");
+function haptic() {
+  try {
+    if (Haptics) Promise.resolve(Haptics.impact({ style: "LIGHT" })).catch(() => {});
+    else if (navigator.vibrate) navigator.vibrate(12);
+  } catch (_) {}
+}
 // esegue un pezzo di inizializzazione: se fallisce lo segnala ma l'app va avanti
 function on(id, fn) { section(id, () => { $(id).onclick = fn; }); }
 function section(name, fn) {
   try { fn(); } catch (e) { if (window.apReportError) window.apReportError(`Avvio (${name}): ${e && e.message || e}`, e); else console.error(e); }
 }
+
+// ---------- nome dell'app ----------
+section("nome", () => {
+  document.title = APP_NAME;
+  document.querySelectorAll("[data-app-name]").forEach(el => { el.textContent = APP_NAME; });
+  const v = $("appVersion"); if (v) v.textContent = "Versione " + APP_VERSION;
+});
 
 // ---------- impostazioni ----------
 const store = {
@@ -79,6 +97,7 @@ function showTab(name) {
     if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
   if (name === "settings") { $("apiKey").value = apiKey; segSet("model", model); $("settingsStatus").textContent = ""; }
+  if (name === "ai" && studio) studio.sync();
 }
 section("schede", () => {
   document.addEventListener("click", e => {
@@ -145,7 +164,7 @@ function addFiles(list) {
   $("status").classList.remove("err");
   for (const f of files) {
     if (S.items.length >= MAX) { skipped++; continue; }
-    const it = { id: nextId++, file: f, rot: 0, box: null, boxRot: 0, src: null, ver: 0, out: null, outPromise: null };
+    const it = { id: nextId++, file: f, rot: 0, tilt: 0, edits: new Set(), forceWhiten: false, box: null, boxRot: 0, src: null, ver: 0, out: null, outPromise: null };
     S.items.push(it); makeTile(it);
     enqueue(() => prepare(it).then(() => { drawTile(it, rotated(it.src, it.rot)); return renderItem(it); })).catch(() => failTile(it));
   }
@@ -183,6 +202,22 @@ function rotated(src, rot) {
   x.drawImage(src, -src.width / 2, -src.height / 2);
   return c;
 }
+// rotazione fine (Raddrizza): ingrandisce quel tanto che basta per non lasciare angoli vuoti
+function coverScale(deg, w, h) {
+  const a = Math.abs(deg || 0) * Math.PI / 180;
+  if (!a) return 1;
+  const c = Math.cos(a), sn = Math.sin(a);
+  return Math.max((w * c + h * sn) / w, (w * sn + h * c) / h);
+}
+function oriented(it) {
+  const base = rotated(it.src, it.rot);
+  if (!it.tilt) return base;
+  const w = base.width, h = base.height, k = coverScale(it.tilt, w, h);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const x = c.getContext("2d"); x.imageSmoothingQuality = "high";
+  x.translate(w / 2, h / 2); x.rotate(it.tilt * Math.PI / 180); x.scale(k, k); x.drawImage(base, -w / 2, -h / 2);
+  return c;
+}
 function rotateBox(b, deg) {
   let r = ((deg % 360) + 360) % 360, box = b;
   while (r > 0) { const [x0, y0, x1, y1] = box; box = [1 - y1, x0, 1 - y0, x1]; r -= 90; }
@@ -207,7 +242,7 @@ async function renderItem(it) {
   if (!it.src) return;
   const v = ++it.ver;
   setWorking(it, true);
-  const Src = rotated(it.src, it.rot), W = Src.width, H = Src.height;
+  const Src = oriented(it), W = Src.width, H = Src.height;
   const OW = 1200, OH = S.fmt === "34" ? 1600 : 1200, A = OW / OH;
   let rx, ry, rw, rh;
   const box = validBox(it.box) ? rotateBox(it.box.map(n => Math.min(1, Math.max(0, n))), it.rot - it.boxRot) : null;
@@ -234,7 +269,7 @@ async function renderItem(it) {
   x.drawImage(Src, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - rx) * k, (sy0 - ry) * k, (sx1 - sx0) * k, (sy1 - sy0) * k);
   if (!it.orig) drawTile(it, out); // il nuovo taglio si vede subito
 
-  const img = await enhanceAsync(x.getImageData(0, 0, OW, OH), $("whiten").checked);
+  const img = await enhanceAsync(x.getImageData(0, 0, OW, OH), $("whiten").checked || it.forceWhiten);
   if (v !== it.ver || !S.items.includes(it)) return;
   x.putImageData(img, 0, 0);
   setProcessed(it, out);
@@ -242,7 +277,10 @@ async function renderItem(it) {
   it.el.classList.remove("done"); void it.el.offsetWidth; it.el.classList.add("done");
   // il JPG finale si prepara in sottofondo, serve solo per salvare o condividere
   it.out = null;
-  it.outPromise = new Promise(r => out.toBlob(r, "image/jpeg", 0.92)).then(b => { if (v === it.ver) { it.out = b; refresh(); } return b; });
+  it.outPromise = new Promise(r => out.toBlob(r, "image/jpeg", 0.92)).then(b => {
+    if (v === it.ver) { it.out = b; refresh(); if (viewer) viewer.refreshItem(it); }
+    return b;
+  });
   refresh();
 }
 
@@ -279,6 +317,19 @@ function paintTile(it) {
   it.el.classList.toggle("orig", !!it.orig);
   if (it.eye) { it.eye.setAttribute("aria-pressed", String(!!it.orig)); it.eye.setAttribute("aria-label", it.orig ? "Mostra la foto sistemata" : "Mostra l'originale"); }
   if (!it.el.classList.contains("failed")) it.badge.textContent = it.orig ? "Originale" : label(it);
+  paintEdits(it);
+}
+const EDIT_NAMES = { auto: "Auto", crop: "Ritaglio", straighten: "Dritta" };
+function editLabel(it) {
+  if (!it.edits || !it.edits.size) return "";
+  const names = [...it.edits].map(e => EDIT_NAMES[e] || e);
+  return names.length === 1 ? names[0] : `${names.length} modifiche`;
+}
+function paintEdits(it) {
+  if (!it.ebadge) return;
+  const l = editLabel(it);
+  it.ebadge.hidden = !l; it.ebadge.textContent = l ? "✦ " + l : "";
+  it.ebadge.title = l ? "Modifiche AI: " + [...it.edits].map(e => EDIT_NAMES[e] || e).join(", ") : "";
 }
 const EYE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 function makeTile(it) {
@@ -296,39 +347,56 @@ function makeTile(it) {
     e.stopPropagation(); it.rot = (it.rot + 90) % 360;
     r.classList.remove("spin"); void r.offsetWidth; r.classList.add("spin");
     if (it.orig && it.src) drawTile(it, rotated(it.src, it.rot));
-    enqueue(() => renderItem(it));
+    rotateItem(it);
   };
   // occhio: tocca per vedere l'originale, ritocca per tornare alla foto sistemata
   eye.onclick = e => { e.stopPropagation(); if (!it.src) return; it.orig = !it.orig; paintTile(it); };
-  t.append(cv, badge, x, eye, r);
-  it.el = t; it.cv = cv; it.badge = badge; it.eye = eye;
+  const ebadge = document.createElement("span"); ebadge.className = "ebadge"; ebadge.hidden = true;
+  const ring = document.createElement("i"); ring.className = "ring"; ring.setAttribute("aria-hidden", "true");
+  t.append(cv, ring, badge, ebadge, x, eye, r);
+  it.el = t; it.cv = cv; it.badge = badge; it.eye = eye; it.ebadge = ebadge;
   setupDrag(it);
   $("grid").append(t);
 }
 
-// ---------- riordino trascinando (Pointer Events) ----------
-// Tieni premuto ~0,3 s, poi trascina. Se il dito si muove prima, è un normale scorrimento.
+// ---------- gesti sulla griglia (Pointer Events) ----------
+// • tocco breve → foto a schermo intero
+// • pressione lunga senza muovere il dito → piccola vibrazione, poi al rilascio schermo intero
+// • pressione lunga + trascinamento → riordino
+// Se il dito si muove prima della pressione lunga è un normale scorrimento della pagina.
 const LONG_PRESS = 300, SLOP = 10;
 let drag = null;
 function setupDrag(it) {
   const t = it.el;
   let press = null;
-  const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
+  const clear = () => { if (press) { clearTimeout(press.timer); press = null; } t.classList.remove("armed"); };
   t.addEventListener("pointerdown", e => {
     if (drag || press || (e.pointerType === "mouse" && e.button !== 0) || e.target.closest("button")) return;
-    if (!S.items.includes(it) || S.items.length < 2) return;
-    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
-    p.timer = setTimeout(() => { if (press === p) { press = null; startDrag(it, p); } }, LONG_PRESS);
+    if (!S.items.includes(it)) return;
+    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, armed: false };
+    p.timer = setTimeout(() => {
+      if (press !== p) return;
+      p.armed = true; t.classList.add("armed"); haptic();
+    }, LONG_PRESS);
     press = p;
   });
   t.addEventListener("pointermove", e => {
     if (!press || e.pointerId !== press.id) return;
     press.x = e.clientX; press.y = e.clientY;
-    if (Math.hypot(press.x - press.x0, press.y - press.y0) > SLOP) cancelPress();
+    if (Math.hypot(press.x - press.x0, press.y - press.y0) <= SLOP) return;
+    if (press.armed && S.items.length > 1) { const p = press; clear(); startDrag(it, p); }
+    else if (!press.armed) clear();
   });
-  ["pointerup", "pointercancel"].forEach(ev => t.addEventListener(ev, e => { if (press && e.pointerId === press.id) cancelPress(); }));
-  // mentre si trascina la pagina non deve scorrere col dito (Android)
-  t.addEventListener("touchmove", e => { if (drag && drag.it === it && e.cancelable) e.preventDefault(); }, { passive: false });
+  t.addEventListener("pointerup", e => {
+    if (!press || e.pointerId !== press.id) return;
+    clear();
+    openViewer(it);
+  });
+  t.addEventListener("pointercancel", e => { if (press && e.pointerId === press.id) clear(); });
+  // dopo la pressione lunga (e mentre si trascina) la pagina non deve scorrere col dito (Android)
+  t.addEventListener("touchmove", e => {
+    if (((drag && drag.it === it) || (press && press.armed)) && e.cancelable) e.preventDefault();
+  }, { passive: false });
   t.addEventListener("contextmenu", e => e.preventDefault());
 }
 function pageSlot(el) { const r = el.getBoundingClientRect(); return { x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height }; }
@@ -339,7 +407,6 @@ function startDrag(it, p) {
   drag = { it, from, to: from, slots, id: p.id, sx: p.x + window.scrollX, sy: p.y + window.scrollY, px: p.x, py: p.y, raf: 0 };
   try { it.el.setPointerCapture(p.id); } catch (_) {}
   it.el.classList.add("dragging"); $("grid").classList.add("sorting");
-  try { navigator.vibrate && navigator.vibrate(12); } catch (_) {}
   document.addEventListener("pointermove", onDragMove, true);
   document.addEventListener("pointerup", onDragEnd, true);
   document.addEventListener("pointercancel", onDragEnd, true);
@@ -410,7 +477,13 @@ function onDragEnd(e) {
 }
 
 function label(it) { return S.items[0] === it ? "Copertina" : String(S.items.indexOf(it) + 1); }
-function setWorking(it, on) { it.el && it.el.classList.toggle("working", on); }
+function setWorking(it, on) {
+  if (!it.el) return;
+  it.el.classList.toggle("working", on);
+  if (viewer) viewer.refreshItem(it);
+  if (studio) studio.sync();
+}
+function rotateItem(it) { it.rot = (it.rot + 90) % 360; enqueue(() => renderItem(it)); }
 function failTile(it) {
   setWorking(it, false); it.el.classList.add("failed");
   setStatus("Una foto non si apre (formato non supportato). Toccala con × e prova con un'altra.", true);
@@ -429,6 +502,7 @@ function refresh() {
   if (c.textContent !== txt) { c.textContent = txt; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
   $("photoTools").hidden = !ready;
   $("go").disabled = !n || S.writing;
+  if (studio) studio.sync();
   if (!S.writing && !$("status").classList.contains("err")) {
     setStatus(!n ? "Aggiungi almeno una foto per iniziare." : ready < n ? `Sistemo le foto… ${ready} di ${n}` : `${n} ${n === 1 ? "foto pronta" : "foto pronte"}. Ora puoi scrivere l'annuncio.`);
   }
@@ -495,12 +569,12 @@ on("saveAll", async () => {
       const base = Date.now() - blobs.length * 1000;
       for (let i = 0; i < blobs.length; i++) {
         setStatus(`Salvo nella Galleria… ${i + 1} di ${blobs.length}`);
-        await Gallery.saveImage({ data: await blobToB64(blobs[i]), folder, fileName: fname(i), time: base + i * 1000 });
+        await Gallery.saveImage({ data: await blobToB64(blobs[i]), root: APP_NAME, folder, fileName: fname(i), time: base + i * 1000 });
       }
-      setStatus(`Salvate ${blobs.length} foto nella Galleria › AnnuncioPronto › ${folder}`);
+      setStatus(`Salvate ${blobs.length} foto nella Galleria › ${APP_NAME} › ${folder}`);
     } else {
-      await writeAll(blobs, "DOCUMENTS", `AnnuncioPronto/${folder}`);
-      setStatus(`Foto salvate in Documenti › AnnuncioPronto › ${folder}`);
+      await writeAll(blobs, "DOCUMENTS", `${APP_NAME}/${folder}`);
+      setStatus(`Foto salvate in Documenti › ${APP_NAME} › ${folder}`);
     }
   } catch (e) {
     setStatus("Salvataggio non riuscito" + (e && e.message ? ` (${e.message})` : "") + ". Prova «Scarica ZIP» o «Condividi tutte».", true);
@@ -579,9 +653,18 @@ function aiImage(it) {
   return c.toDataURL("image/jpeg", 0.85).split(",")[1];
 }
 
-async function askClaude(items) {
+async function askClaude(items) { return callClaude(items, buildPrompt(items.length), 1500); }
+async function askBoxes(items) {
+  const prompt = `Ti mostro ${items.length} foto dello stesso articolo da vendere su Vinted (categoria: ${S.cat}).
+Per OGNI foto, nell'ordine, indica il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
+Rispondi SOLO con JSON: {"box":[[0.1,0.05,0.9,0.95]]}`;
+  const r = await callClaude(items, prompt, 400);
+  if (!r || !Array.isArray(r.box)) throw new Error("json");
+  return r.box;
+}
+async function callClaude(items, prompt, maxTokens) {
   const content = items.map(it => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: aiImage(it) } }));
-  content.push({ type: "text", text: buildPrompt(items.length) });
+  content.push({ type: "text", text: prompt });
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -590,7 +673,7 @@ async function askClaude(items) {
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true"
     },
-    body: JSON.stringify({ model, max_tokens: 1500, messages: [{ role: "user", content }] })
+    body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "user", content }] })
   });
   if (!res.ok) { const e = new Error("http"); e.status = res.status; throw e; }
   const data = await res.json();
@@ -600,13 +683,13 @@ async function askClaude(items) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
-function errMsg(e) {
+function errMsg(e, offline) {
   if (e.status === 401 || e.status === 403) return "Chiave API non valida: controllala in Impostazioni.";
   if (e.status === 429) return "Troppe richieste ravvicinate: riprova tra un minuto.";
   if (e.status === 400) return "Richiesta rifiutata. Controlla credito e modello su console.anthropic.com.";
   if (e.status === 529 || e.status >= 500) return "Il servizio è occupato: riprova tra poco.";
   if (e.message === "json") return "Risposta non leggibile: premi di nuovo «Scrivi l'annuncio».";
-  return "Nessuna connessione. Ho preparato una bozza semplice.";
+  return offline || "Nessuna connessione. Ho preparato una bozza semplice.";
 }
 
 function fallbackText() {
@@ -644,7 +727,7 @@ on("go", async () => {
     try { ai = await askClaude(ready); } catch (e) { note = errMsg(e); }
   }
   if (ai && Array.isArray(ai.box)) {
-    ai.box.forEach((b, i) => { const it = ready[i]; if (it && S.items.includes(it)) { it.box = b; it.boxRot = it.rot; enqueue(() => renderItem(it)); } });
+    ai.box.forEach((b, i) => { const it = ready[i]; if (it && S.items.includes(it) && validBox(b)) { it.box = b; it.boxRot = it.rot; enqueue(() => renderItem(it)); } });
   }
   const text = ai && ai.titolo && ai.descrizione ? ai : fallbackText();
   S.text = text;
@@ -810,6 +893,97 @@ on("reset", () => {
   $("status").classList.remove("err");
   refresh();
   window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+
+// ---------- visualizzatore a schermo intero (viewer.js) ----------
+const viewable = () => S.items.filter(i => i.src && !i.el.classList.contains("failed"));
+const urlCache = new WeakMap();
+function cachedUrl(it, key, make) {
+  const c = urlCache.get(it) || {};
+  if (c[key[0]] && c[key[0]].key === key) return c[key[0]].url;
+  const url = make(); if (!url) return null;
+  if (c[key[0]] && c[key[0]].url.startsWith("blob:")) URL.revokeObjectURL(c[key[0]].url);
+  c[key[0]] = { key, url }; urlCache.set(it, c);
+  return url;
+}
+const phCache = new WeakMap();
+function placeholder(it, orig) {
+  const key = orig ? `o${it.rot}` : `f${it.ver}`;
+  const c = phCache.get(it) || {};
+  if (c[orig ? "o" : "f"] && c[orig ? "o" : "f"].key === key) return c[orig ? "o" : "f"].url;
+  const src = orig ? (it.src && rotated(it.src, it.rot)) : (it.proc || it.cv);
+  if (!src) return null;
+  const k = Math.min(1, 480 / Math.max(src.width, src.height));
+  const cv = document.createElement("canvas"); cv.width = Math.round(src.width * k); cv.height = Math.round(src.height * k);
+  cv.getContext("2d").drawImage(src, 0, 0, cv.width, cv.height);
+  const url = cv.toDataURL("image/jpeg", 0.8);
+  c[orig ? "o" : "f"] = { key, url }; phCache.set(it, c);
+  return url;
+}
+async function fullUrl(it, orig) {
+  if (orig) {
+    if (!it.src) return null;
+    const key = `o${it.rot}`, have = (urlCache.get(it) || {}).o;
+    if (have && have.key === key) return have.url;
+    const blob = await new Promise(r => rotated(it.src, it.rot).toBlob(r, "image/jpeg", 0.92));
+    return blob ? cachedUrl(it, key, () => URL.createObjectURL(blob)) : null;
+  }
+  const v = it.ver, blob = it.out || (it.outPromise && await it.outPromise);
+  if (!blob) return null;
+  return cachedUrl(it, `f${v}`, () => URL.createObjectURL(blob));
+}
+function openViewer(it) {
+  if (!viewer || !it.src || it.el.classList.contains("failed")) return;
+  viewer.open(it);
+}
+section("visualizzatore", () => {
+  viewer = window.createViewer({
+    items: viewable,
+    tileRect: it => (it.el && it.el.isConnected && !$("tab-home").hidden) ? it.el.getBoundingClientRect() : null,
+    placeholder, fullUrl,
+    aspect: () => S.fmt === "34" ? 4 / 3 : 1,
+    isWorking: it => it.el.classList.contains("working"),
+    rotate: it => rotateItem(it),
+    remove: it => removeItem(it)
+  });
+});
+
+// ---------- scheda AI (studio.js) ----------
+section("studio", () => {
+  const rerender = list => Promise.all(list.map(it => enqueue(() => renderItem(it))));
+  studio = window.createStudio({
+    items: viewable,
+    thumbSource: it => it.proc || it.cv,
+    isWorking: it => it.el.classList.contains("working"),
+    editLabel,
+    coverScale,
+    async applyAuto(list) {
+      list.forEach(it => { it.forceWhiten = true; it.edits.add("auto"); });
+      await rerender(list);
+    },
+    async applyCrop(list) {
+      if (!apiKey) throw new Error("Per il ritaglio intelligente serve la chiave API: aggiungila nella scheda Impostazioni.");
+      let found = 0;
+      for (let i = 0; i < list.length; i += AI_PHOTOS) {
+        const batch = list.slice(i, i + AI_PHOTOS);
+        let boxes;
+        try { boxes = await askBoxes(batch); }
+        catch (e) { throw new Error(errMsg(e, "Nessuna connessione: il ritaglio intelligente ha bisogno di internet.")); }
+        batch.forEach((it, k) => {
+          const b = boxes[k];
+          if (S.items.includes(it) && validBox(b)) { it.box = b; it.boxRot = it.rot; it.edits.add("crop"); found++; }
+        });
+      }
+      await rerender(list);
+      return found ? `Ritaglio fatto su ${found} ${found === 1 ? "foto" : "foto"}. Le trovi in Home.` : "Claude non ha trovato un ritaglio migliore: le foto restano com'erano.";
+    },
+    async applyTilt(list, deg) {
+      list.forEach(it => { it.tilt = deg; if (deg) it.edits.add("straighten"); else it.edits.delete("straighten"); });
+      await rerender(list);
+      return deg ? `Foto raddrizzate di ${deg.toLocaleString("it-IT")}°. Le trovi in Home.` : "Raddrizzamento tolto.";
+    }
+  });
+  studio.sync();
 });
 
 // ---------- caricamento iniziale ----------

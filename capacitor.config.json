@@ -1,6 +1,6 @@
 {
   "appId": "it.annunciopronto.app",
-  "appName": "Annuncio Pronto",
+  "appName": "ListLab",
   "webDir": "www",
   "server": {
     "androidScheme": "https"

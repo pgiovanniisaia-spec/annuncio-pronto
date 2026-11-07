@@ -3,20 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#23584A">
-<title>Annuncio Pronto</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<meta name="theme-color" content="#E8F3EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1A14" media="(prefers-color-scheme: dark)">
+<title></title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="splash" aria-hidden="true"><img src="logo.png" alt="" width="112" height="112"></div>
+<!-- Il nome dell'app si trova solo in APP_NAME (app.js): gli elementi con data-app-name lo ricevono da lì. -->
+<div id="splash" aria-hidden="true"><img src="logo.svg" alt="" width="120" height="120"></div>
 
-<main class="tab wrap" id="tab-home">
-  <header>
-    <div class="label">Per Vinted · scarpe, abbigliamento, capispalla</div>
-    <h1>Annuncio Pronto</h1>
-    <p>Aggiungi le foto: le sistemo subito. Poi scrivo titolo, descrizione e hashtag.</p>
+<!-- ============ STUDIO AI ============ -->
+<main class="tab wrap" id="tab-ai" hidden>
+  <header class="apphead">
+    <img class="applogo" src="logo.svg" alt="" width="40" height="40">
+    <div>
+      <div class="label"><span data-app-name></span> · studio</div>
+      <h1>Studio AI</h1>
+    </div>
   </header>
+  <p class="lead">Scegli le foto e applica una sistemazione. I risultati tornano nella griglia di Home, nello stesso ordine.</p>
+
+  <section class="panel">
+    <div class="step"><h2>Foto</h2><span class="count" id="aiSelCount"></span></div>
+    <div class="strip" id="aiStrip" role="listbox" aria-multiselectable="true" aria-label="Foto dell'annuncio"></div>
+    <div class="empty" id="aiEmpty">
+      <span>Non ci sono ancora foto.</span>
+      <button class="btn primary" type="button" data-goto="home">Aggiungi foto in Home</button>
+    </div>
+    <div class="linkrow" id="aiSelTools">
+      <button class="linkbtn" type="button" id="aiAll">Seleziona tutte</button>
+      <button class="linkbtn" type="button" id="aiNone">Nessuna</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Strumenti</h2>
+    <div class="tool">
+      <div class="toolhead">
+        <span class="toolicon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
+        <div><strong>Sistemazione automatica</strong><span class="hint">Luce, colori e sfondo chiaro più pulito.</span></div>
+      </div>
+      <button class="btn primary" type="button" id="aiAuto">Applica</button>
+    </div>
+    <div class="tool">
+      <div class="toolhead">
+        <span class="toolicon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></span>
+        <div><strong>Ritaglio intelligente</strong><span class="hint">Claude trova il capo e lo centra nella foto. Serve la chiave API.</span></div>
+      </div>
+      <button class="btn primary" type="button" id="aiCrop">Applica</button>
+    </div>
+    <div class="tool">
+      <div class="toolhead">
+        <span class="toolicon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18"/><path d="M12 3a9 9 0 1 1-6.4 2.6"/><path d="M3 3v5h5"/></svg></span>
+        <div><strong>Raddrizza</strong><span class="hint">Rotazione fine per foto storte.</span></div>
+      </div>
+      <div class="slider">
+        <input type="range" id="aiTilt" min="-10" max="10" step="0.5" value="0" aria-label="Angolo di rotazione">
+        <output id="aiTiltVal" for="aiTilt">0°</output>
+      </div>
+      <div class="toolbtns">
+        <button class="btn" type="button" id="aiTiltReset">Azzera</button>
+        <button class="btn primary" type="button" id="aiTiltApply">Applica</button>
+      </div>
+    </div>
+    <div class="status" id="aiStatus" role="status"></div>
+  </section>
+
+  <section class="panel soon" aria-disabled="true">
+    <div class="step"><h2>Modifica con AI (OpenAI)</h2><span class="pill">In arrivo</span></div>
+    <p class="hint">Sfondi da studio e manichino invisibile generati dall'intelligenza artificiale. Lo colleghiamo nel prossimo aggiornamento.</p>
+    <div class="choices" id="aiEditModes">
+      <label class="choice"><input type="radio" name="aiEdit" value="studio-white" disabled checked><span><strong>Sfondo bianco da studio</strong><small>Fondo bianco pulito con ombra morbida</small></span></label>
+      <label class="choice"><input type="radio" name="aiEdit" value="neutral" disabled><span><strong>Sfondo neutro</strong><small>Grigio chiaro o beige uniforme</small></span></label>
+      <label class="choice"><input type="radio" name="aiEdit" value="ghost-mannequin" disabled><span><strong>Manichino invisibile</strong><small>Il capo "indossato" senza persona</small></span></label>
+      <label class="choice"><input type="radio" name="aiEdit" value="custom" disabled><span><strong>Istruzione libera</strong><small>Descrivi tu la modifica</small></span></label>
+    </div>
+    <textarea id="aiEditPrompt" placeholder="Es. togli le pieghe e metti uno sfondo grigio chiaro" disabled></textarea>
+    <button class="btn primary" type="button" id="aiEditGo" disabled>Genera</button>
+  </section>
+</main>
+
+<!-- ============ HOME ============ -->
+<main class="tab wrap" id="tab-home">
+  <header class="apphead">
+    <img class="applogo" src="logo.svg" alt="" width="40" height="40">
+    <div>
+      <div class="label">Per Vinted · scarpe, abbigliamento, capispalla</div>
+      <h1 data-app-name></h1>
+    </div>
+  </header>
+  <p class="lead">Aggiungi le foto: le sistemo subito. Poi scrivo titolo, descrizione e hashtag.</p>
 
   <div class="notice" id="keyNotice" hidden>
     <span>Per scrivere le descrizioni serve la chiave API di Anthropic.</span>
@@ -27,7 +104,7 @@
     <div class="step"><span class="n">1</span><h2>Foto</h2><span class="count" id="count">0 / 20</span></div>
     <button class="drop" type="button" id="drop">
       <strong>+ Aggiungi foto</strong>
-      <span>Fino a 20 foto. La prima è la copertina. Tieni premuta una foto e trascinala per cambiare l'ordine.</span>
+      <span>Fino a 20 foto. La prima è la copertina. Tocca una foto per vederla grande; tienila premuta e trascinala per cambiare l'ordine.</span>
     </button>
     <input type="file" id="file" accept="image/*" multiple>
     <div class="grid" id="grid"></div>
@@ -101,17 +178,21 @@
   </section>
 </main>
 
+<!-- ============ IMPOSTAZIONI ============ -->
 <main class="tab wrap" id="tab-settings" hidden>
-  <header>
-    <div class="label">Annuncio Pronto</div>
-    <h1>Impostazioni</h1>
+  <header class="apphead">
+    <img class="applogo" src="logo.svg" alt="" width="40" height="40">
+    <div>
+      <div class="label" data-app-name></div>
+      <h1>Impostazioni</h1>
+    </div>
   </header>
   <section class="panel" id="settings">
     <h2>Claude</h2>
     <div class="field">
       <label class="label" for="apiKey">Chiave API Anthropic</label>
       <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
-      <span class="hint">Serve per scrivere le descrizioni. Resta salvata solo su questo telefono. La crei su console.anthropic.com.</span>
+      <span class="hint">Serve per scrivere le descrizioni e per il ritaglio intelligente. Resta salvata solo su questo telefono. La crei su console.anthropic.com.</span>
     </div>
     <div class="field">
       <span class="label">Modello</span>
@@ -125,19 +206,23 @@
     <div class="status" id="settingsStatus" role="status"></div>
   </section>
   <section class="panel about">
-    <h2>Informazioni</h2>
-    <div class="aboutrow"><img src="logo.png" alt="" width="48" height="48"><div><strong>Annuncio Pronto</strong><span class="hint" id="appVersion">Versione 1.0</span></div></div>
+    <h2>Informazioni sull'app</h2>
+    <div class="aboutrow"><img src="logo.svg" alt="" width="56" height="56"><div><strong data-app-name></strong><span class="hint" id="appVersion"></span></div></div>
     <p>Sistema le foto per Vinted (luce, colori, ritaglio) direttamente sul telefono e scrive titolo, descrizione e hashtag con Claude di Anthropic.</p>
     <ul class="facts">
       <li>Le foto vengono sistemate sul telefono, anche senza internet.</li>
       <li>Per il testo vengono inviate a Claude solo le prime 5 foto, ridotte.</li>
       <li>La chiave API e lo storico restano solo su questo telefono.</li>
-      <li>Le foto salvate finiscono nella Galleria, in Immagini › AnnuncioPronto.</li>
+      <li>Le foto salvate finiscono nella Galleria, in Immagini › <span data-app-name></span>.</li>
     </ul>
   </section>
 </main>
 
 <nav class="tabbar" aria-label="Sezioni">
+  <button type="button" data-tab="ai">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c.5 4.2 2.8 6.5 7 7-4.2.5-6.5 2.8-7 7-.5-4.2-2.8-6.5-7-7 4.2-.5 6.5-2.8 7-7z"/><path d="M19 15.5c.2 1.6 1 2.4 2.5 2.5-1.5.2-2.3 1-2.5 2.5-.2-1.5-1-2.3-2.5-2.5 1.5-.1 2.3-.9 2.5-2.5z"/></svg>
+    <span>AI</span>
+  </button>
   <button type="button" data-tab="home" aria-current="page">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
     <span>Home</span>
@@ -147,8 +232,35 @@
     <span>Impostazioni</span>
   </button>
 </nav>
+
+<div id="viewer" hidden role="dialog" aria-modal="true" aria-label="Foto a schermo intero">
+  <div class="vbg"></div>
+  <div class="vstage" id="vStage">
+    <div class="vtrack" id="vTrack">
+      <div class="vslide"><img alt="" draggable="false"></div>
+      <div class="vslide"><img alt="" draggable="false"></div>
+      <div class="vslide"><img alt="" draggable="false"></div>
+    </div>
+  </div>
+  <div class="vtop">
+    <button class="vbtn round" type="button" id="vClose" aria-label="Chiudi">✕</button>
+    <span class="vcount" id="vCount" aria-live="polite"></span>
+    <div class="vseg" id="vMode" role="group" aria-label="Versione">
+      <button type="button" data-v="fixed" aria-pressed="true">Sistemata</button>
+      <button type="button" data-v="orig" aria-pressed="false">Originale</button>
+    </div>
+  </div>
+  <div class="vbottom">
+    <button class="vbtn" type="button" id="vRotate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg> Ruota</button>
+    <button class="vbtn" type="button" id="vDelete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg> Elimina</button>
+  </div>
+</div>
+
 <script src="errors.js"></script>
 <script src="enhance.js"></script>
+<script src="ai-images.js"></script>
+<script src="viewer.js"></script>
+<script src="studio.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

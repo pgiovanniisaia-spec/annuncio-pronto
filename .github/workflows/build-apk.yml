@@ -50,7 +50,7 @@ jobs:
       - name: Crea progetto Android
         run: |
           if [ ! -d android ]; then npx cap add android; fi
-          npx capacitor-assets generate --android --iconBackgroundColor '#23584A' --splashBackgroundColor '#FFFFFF' --splashBackgroundColorDark '#FFFFFF' || echo "Icone non generate, uso quelle predefinite"
+          npx capacitor-assets generate --android --iconBackgroundColor '#E8F3EC' --splashBackgroundColor '#FFFFFF' --splashBackgroundColorDark '#FFFFFF' || echo "Icone non generate, uso quelle predefinite"
           npx cap sync android
           node scripts/android-setup.mjs
 
@@ -61,19 +61,19 @@ jobs:
           ./gradlew assembleDebug --no-daemon
 
       - name: Rinomina APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk AnnuncioPronto.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ListLab.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AnnuncioPronto
-          path: AnnuncioPronto.apk
+          name: ListLab
+          path: ListLab.apk
 
       - name: Pubblica come release (link di download diretto)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Annuncio Pronto ${{ github.run_number }}
-          files: AnnuncioPronto.apk
+          name: ListLab ${{ github.run_number }}
+          files: ListLab.apk
           make_latest: true
     permissions:
       contents: write

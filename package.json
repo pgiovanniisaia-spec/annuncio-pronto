@@ -1,19 +1,21 @@
 {
-  "name": "annuncio-pronto",
-  "version": "1.0.0",
+  "name": "listlab",
+  "version": "2.0.0",
   "private": true,
-  "description": "App Android che sistema le foto per Vinted e scrive l'annuncio con Claude.",
+  "description": "ListLab: app Android che sistema le foto per Vinted e scrive l'annuncio con Claude.",
   "scripts": {
     "serve": "npx http-server www -p 8080 -c-1",
     "sync": "npx cap sync android",
-    "icons": "npx capacitor-assets generate --android --iconBackgroundColor '#23584A' --splashBackgroundColor '#FFFFFF' --splashBackgroundColorDark '#FFFFFF'",
+    "icons": "npx capacitor-assets generate --android --iconBackgroundColor '#E8F3EC' --splashBackgroundColor '#FFFFFF' --splashBackgroundColorDark '#FFFFFF'",
     "apk": "npx cap sync android && node scripts/android-setup.mjs && cd android && ./gradlew assembleDebug",
-    "android:setup": "node scripts/android-setup.mjs"
+    "android:setup": "node scripts/android-setup.mjs",
+    "logo": "node scripts/render-logo.js . . && node scripts/render-splash.js ."
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/haptics": "^7.0.5",
     "@capacitor/share": "^7.0.0",
     "@capacitor/splash-screen": "^7.0.5",
     "capacitor-gallery-saver": "file:plugins/gallery-saver"
