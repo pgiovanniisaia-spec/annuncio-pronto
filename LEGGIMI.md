@@ -19,15 +19,20 @@
 Le foto si sistemano anche senza internet. Per scrivere le descrizioni serve una chiave API di Anthropic:
 1. Vai su console.anthropic.com, registrati e aggiungi un po' di credito (bastano 5 €).
 2. Crea una chiave in "API Keys".
-3. Nell'app tocca **Impostazioni**, incollala e salva. Resta solo sul tuo telefono.
+3. Nell'app tocca **Impostazioni** nella barra in basso, incollala e salva. Resta solo sul tuo telefono.
 
 Costo indicativo: con "Veloce", meno di un centesimo per annuncio. Con "Più accurato", qualche centesimo.
 
 ## Come si usa
 1. Aggiungi o scatta fino a 20 foto: si sistemano subito.
-   - Tieni premuta una foto per vedere l'originale.
-   - Usa ↻ per ruotarla e × per toglierla.
+   - **Tieni premuta** una foto e **trascinala** per cambiare l'ordine. La prima è sempre la copertina.
+   - Tocca l'**occhio** per vedere l'originale (ritocca per tornare), ↻ per ruotarla, × per toglierla.
 2. Scegli la categoria e inserisci marca, taglia e condizioni.
 3. Tocca **Scrivi l'annuncio**. Le prime 5 foto vengono anche ritagliate meglio attorno al capo.
-4. **Condividi tutte**: puoi mandare le foto direttamente a Vinted o salvarle in Google Foto.
+4. Le foto, sempre nell'ordine della griglia (01-copertina.jpg, 02.jpg…):
+   - **Condividi tutte**: mandale direttamente a Vinted.
+   - **Salva nel telefono**: finiscono nella Galleria, in Immagini › AnnuncioPronto › (titolo dell'annuncio).
+   - **Scarica ZIP**: un unico file da mandare dove vuoi.
 5. Usa **Copia tutto** e incolla il testo nell'annuncio.
+
+La chiave API si inserisce nella scheda **Impostazioni**, nella barra in basso.

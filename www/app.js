@@ -25,6 +25,7 @@ function plugin(name) {
 }
 const Filesystem = plugin("Filesystem");
 const Share = plugin("Share");
+const Gallery = plugin("GallerySaver");   // plugin locale: plugins/gallery-saver
 // esegue un pezzo di inizializzazione: se fallisce lo segnala ma l'app va avanti
 function on(id, fn) { section(id, () => { $(id).onclick = fn; }); }
 function section(name, fn) {
@@ -46,20 +47,44 @@ function seg(id, onPick) {
     segSet(id, b.dataset.v); onPick(b.dataset.v);
   });
 }
+function updateKeyNotice() { $("keyNotice").hidden = !!apiKey; }
 section("impostazioni", () => {
-$("openSettings").onclick = () => {
-  const p = $("settings"); p.hidden = !p.hidden;
-  if (!p.hidden) { $("apiKey").value = apiKey; segSet("model", model); p.scrollIntoView({ block: "start" }); }
-};
-let pendingModel = model;
-seg("model", v => { pendingModel = v; });
-$("saveSettings").onclick = () => {
-  apiKey = $("apiKey").value.trim(); model = pendingModel;
-  store.set("ap_key", apiKey); store.set("ap_model", model);
-  $("settings").hidden = true;
-  setStatus(apiKey ? "Impostazioni salvate." : "Impostazioni salvate. Senza chiave preparo solo una bozza semplice.");
-};
-if (!apiKey) $("settings").hidden = false;
+  $("apiKey").value = apiKey; segSet("model", model);
+  let pendingModel = model;
+  seg("model", v => { pendingModel = v; });
+  $("saveSettings").onclick = () => {
+    apiKey = $("apiKey").value.trim(); model = pendingModel;
+    store.set("ap_key", apiKey); store.set("ap_model", model);
+    const st = $("settingsStatus");
+    st.textContent = apiKey ? "Impostazioni salvate ✓" : "Salvate. Senza chiave preparo solo una bozza semplice.";
+    st.classList.remove("flash"); void st.offsetWidth; st.classList.add("flash");
+    updateKeyNotice();
+  };
+  updateKeyNotice();
+});
+
+// ---------- schede (barra in basso) ----------
+let currentTab = "home";
+const tabScroll = {};
+function showTab(name) {
+  const to = $("tab-" + name);
+  if (!to || name === currentTab) return;
+  tabScroll[currentTab] = window.scrollY;
+  $("tab-" + currentTab).hidden = true;
+  to.hidden = false;
+  to.classList.remove("enter"); void to.offsetWidth; to.classList.add("enter");
+  window.scrollTo(0, tabScroll[name] || 0);
+  currentTab = name;
+  document.querySelectorAll(".tabbar [data-tab]").forEach(b => {
+    if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
+  if (name === "settings") { $("apiKey").value = apiKey; segSet("model", model); $("settingsStatus").textContent = ""; }
+}
+section("schede", () => {
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-tab],[data-goto]");
+    if (b) { e.preventDefault(); showTab(b.dataset.tab || b.dataset.goto); }
+  });
 });
 
 section("dettagli", () => {
@@ -207,13 +232,12 @@ async function renderItem(it) {
   const sx0 = Math.max(0, rx), sy0 = Math.max(0, ry), sx1 = Math.min(W, rx + rw), sy1 = Math.min(H, ry + rh), k = OW / rw;
   x.imageSmoothingQuality = "high";
   x.drawImage(Src, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - rx) * k, (sy0 - ry) * k, (sx1 - sx0) * k, (sy1 - sy0) * k);
-  drawTile(it, out); // il nuovo taglio si vede subito
+  if (!it.orig) drawTile(it, out); // il nuovo taglio si vede subito
 
   const img = await enhanceAsync(x.getImageData(0, 0, OW, OH), $("whiten").checked);
   if (v !== it.ver || !S.items.includes(it)) return;
   x.putImageData(img, 0, 0);
-  drawTile(it, out);
-  saveProcessed(it);
+  setProcessed(it, out);
   setWorking(it, false);
   it.el.classList.remove("done"); void it.el.offsetWidth; it.el.classList.add("done");
   // il JPG finale si prepara in sottofondo, serve solo per salvare o condividere
@@ -240,38 +264,151 @@ function drawTile(it, source) {
   x.drawImage(source, (TILE_W - w) / 2, (h - hh) / 2, w, hh);
   it.el.classList.add("has-img");
 }
-function saveProcessed(it) {
+// it.proc = anteprima sistemata; la casella mostra quella o, col pulsante occhio, l'originale
+function setProcessed(it, out) {
   const p = it.proc || (it.proc = document.createElement("canvas"));
-  p.width = it.cv.width; p.height = it.cv.height; p.getContext("2d").drawImage(it.cv, 0, 0);
+  const h = tileH(); p.width = TILE_W; p.height = h;
+  const x = p.getContext("2d"), k = Math.max(TILE_W / out.width, h / out.height);
+  x.imageSmoothingQuality = "medium";
+  x.drawImage(out, (TILE_W - out.width * k) / 2, (h - out.height * k) / 2, out.width * k, out.height * k);
+  paintTile(it);
 }
+function paintTile(it) {
+  if (it.orig && it.src) drawTile(it, rotated(it.src, it.rot));
+  else if (it.proc) drawTile(it, it.proc);
+  it.el.classList.toggle("orig", !!it.orig);
+  if (it.eye) { it.eye.setAttribute("aria-pressed", String(!!it.orig)); it.eye.setAttribute("aria-label", it.orig ? "Mostra la foto sistemata" : "Mostra l'originale"); }
+  if (!it.el.classList.contains("failed")) it.badge.textContent = it.orig ? "Originale" : label(it);
+}
+const EYE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 function makeTile(it) {
-  const t = document.createElement("div"); t.className = "tile working";
+  const t = document.createElement("div"); t.className = "tile working"; t.dataset.id = it.id;
   t.style.animationDelay = Math.min(S.items.length - 1, 10) * 30 + "ms";
+  t.addEventListener("animationend", e => { if (e.animationName === "pop") t.classList.add("in"); });
   const cv = document.createElement("canvas"); cv.width = TILE_W; cv.height = tileH();
   const badge = document.createElement("span"); badge.className = "badge";
   const x = document.createElement("button"); x.type = "button"; x.className = "ico x"; x.textContent = "×"; x.setAttribute("aria-label", "Rimuovi foto");
   const r = document.createElement("button"); r.type = "button"; r.className = "ico rot"; r.textContent = "↻"; r.setAttribute("aria-label", "Ruota foto");
+  const eye = document.createElement("button"); eye.type = "button"; eye.className = "ico eye"; eye.innerHTML = EYE_SVG;
+  eye.setAttribute("aria-pressed", "false"); eye.setAttribute("aria-label", "Mostra l'originale");
   x.onclick = e => { e.stopPropagation(); removeItem(it); };
   r.onclick = e => {
     e.stopPropagation(); it.rot = (it.rot + 90) % 360;
     r.classList.remove("spin"); void r.offsetWidth; r.classList.add("spin");
+    if (it.orig && it.src) drawTile(it, rotated(it.src, it.rot));
     enqueue(() => renderItem(it));
   };
-  // tieni premuto per vedere l'originale
-  let holding = false;
-  const showOrig = on => {
-    if (!it.proc || !it.src || holding === on) return;
-    holding = on;
-    drawTile(it, on ? rotated(it.src, it.rot) : it.proc);
-    badge.textContent = on ? "Originale" : label(it);
-  };
-  t.addEventListener("pointerdown", e => { if (e.target === t || e.target === cv) showOrig(true); });
-  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => t.addEventListener(ev, () => showOrig(false)));
-  t.addEventListener("contextmenu", e => e.preventDefault());
-  t.append(cv, badge, x, r);
-  it.el = t; it.cv = cv; it.badge = badge;
+  // occhio: tocca per vedere l'originale, ritocca per tornare alla foto sistemata
+  eye.onclick = e => { e.stopPropagation(); if (!it.src) return; it.orig = !it.orig; paintTile(it); };
+  t.append(cv, badge, x, eye, r);
+  it.el = t; it.cv = cv; it.badge = badge; it.eye = eye;
+  setupDrag(it);
   $("grid").append(t);
 }
+
+// ---------- riordino trascinando (Pointer Events) ----------
+// Tieni premuto ~0,3 s, poi trascina. Se il dito si muove prima, è un normale scorrimento.
+const LONG_PRESS = 300, SLOP = 10;
+let drag = null;
+function setupDrag(it) {
+  const t = it.el;
+  let press = null;
+  const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
+  t.addEventListener("pointerdown", e => {
+    if (drag || press || (e.pointerType === "mouse" && e.button !== 0) || e.target.closest("button")) return;
+    if (!S.items.includes(it) || S.items.length < 2) return;
+    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
+    p.timer = setTimeout(() => { if (press === p) { press = null; startDrag(it, p); } }, LONG_PRESS);
+    press = p;
+  });
+  t.addEventListener("pointermove", e => {
+    if (!press || e.pointerId !== press.id) return;
+    press.x = e.clientX; press.y = e.clientY;
+    if (Math.hypot(press.x - press.x0, press.y - press.y0) > SLOP) cancelPress();
+  });
+  ["pointerup", "pointercancel"].forEach(ev => t.addEventListener(ev, e => { if (press && e.pointerId === press.id) cancelPress(); }));
+  // mentre si trascina la pagina non deve scorrere col dito (Android)
+  t.addEventListener("touchmove", e => { if (drag && drag.it === it && e.cancelable) e.preventDefault(); }, { passive: false });
+  t.addEventListener("contextmenu", e => e.preventDefault());
+}
+function pageSlot(el) { const r = el.getBoundingClientRect(); return { x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height }; }
+function startDrag(it, p) {
+  if (!S.items.includes(it)) return;
+  const slots = S.items.map(i => pageSlot(i.el));
+  const from = S.items.indexOf(it);
+  drag = { it, from, to: from, slots, id: p.id, sx: p.x + window.scrollX, sy: p.y + window.scrollY, px: p.x, py: p.y, raf: 0 };
+  try { it.el.setPointerCapture(p.id); } catch (_) {}
+  it.el.classList.add("dragging"); $("grid").classList.add("sorting");
+  try { navigator.vibrate && navigator.vibrate(12); } catch (_) {}
+  document.addEventListener("pointermove", onDragMove, true);
+  document.addEventListener("pointerup", onDragEnd, true);
+  document.addEventListener("pointercancel", onDragEnd, true);
+  drag.raf = requestAnimationFrame(dragFrame);
+  updateDrag();
+}
+function onDragMove(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag.px = e.clientX; drag.py = e.clientY;
+  if (e.cancelable) e.preventDefault();
+  updateDrag();
+}
+function updateDrag() {
+  const d = drag, X = d.px + window.scrollX, Y = d.py + window.scrollY;
+  d.it.el.style.transform = `translate(${X - d.sx}px, ${Y - d.sy}px) scale(1.07)`;
+  let best = d.to, bd = Infinity;
+  d.slots.forEach((sl, i) => {
+    const dx = X - (sl.x + sl.w / 2), dy = Y - (sl.y + sl.h / 2), dd = dx * dx + dy * dy;
+    if (dd < bd) { bd = dd; best = i; }
+  });
+  if (best !== d.to) { d.to = best; layoutOthers(); }
+}
+// le altre foto scorrono per fare spazio
+function layoutOthers() {
+  const d = drag, order = S.items.filter(i => i !== d.it);
+  order.splice(d.to, 0, d.it);
+  order.forEach((i, k) => {
+    if (i === d.it) return;
+    const cur = d.slots[S.items.indexOf(i)], dst = d.slots[k];
+    i.el.style.transform = cur === dst ? "" : `translate(${dst.x - cur.x}px, ${dst.y - cur.y}px)`;
+  });
+}
+// scorrimento automatico della pagina vicino ai bordi
+function dragFrame() {
+  if (!drag) return;
+  const bar = document.querySelector(".tabbar"), barH = bar ? bar.offsetHeight : 0;
+  const edge = 80, top = edge, bottom = window.innerHeight - barH - edge;
+  let v = 0;
+  if (drag.py < top) v = -Math.ceil((top - drag.py) / 5);
+  else if (drag.py > bottom) v = Math.ceil((drag.py - bottom) / 5);
+  if (v) { const y0 = window.scrollY; window.scrollBy(0, Math.max(-24, Math.min(24, v))); if (window.scrollY !== y0) updateDrag(); }
+  drag.raf = requestAnimationFrame(dragFrame);
+}
+function onDragEnd(e) {
+  if (!drag || e.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  cancelAnimationFrame(d.raf);
+  document.removeEventListener("pointermove", onDragMove, true);
+  document.removeEventListener("pointerup", onDragEnd, true);
+  document.removeEventListener("pointercancel", onDragEnd, true);
+  try { d.it.el.releasePointerCapture(d.id); } catch (_) {}
+  const el = d.it.el, X = d.px + window.scrollX, Y = d.py + window.scrollY;
+  const curX = d.slots[d.from].x + (X - d.sx), curY = d.slots[d.from].y + (Y - d.sy);
+  S.items.splice(d.from, 1); S.items.splice(d.to, 0, d.it);
+  const grid = $("grid");
+  S.items.forEach(i => { i.el.style.transition = "none"; i.el.style.transform = ""; grid.append(i.el); });
+  // la foto parte da dove l'hai lasciata e scivola nella sua nuova casella
+  const dst = d.slots[d.to];
+  el.style.transform = `translate(${curX - dst.x}px, ${curY - dst.y}px) scale(1.07)`;
+  void el.offsetWidth;
+  S.items.forEach(i => { i.el.style.transition = ""; });
+  el.classList.remove("dragging"); el.classList.add("dropping");
+  el.style.transform = "";
+  grid.classList.remove("sorting");
+  setTimeout(() => el.classList.remove("dropping"), 260);
+  refresh();
+  if (d.to !== d.from) setStatus(d.to === 0 ? "Nuova copertina impostata." : `Foto spostata in posizione ${d.to + 1}.`);
+}
+
 function label(it) { return S.items[0] === it ? "Copertina" : String(S.items.indexOf(it) + 1); }
 function setWorking(it, on) { it.el && it.el.classList.toggle("working", on); }
 function failTile(it) {
@@ -286,7 +423,7 @@ function removeItem(it) {
   refresh();
 }
 function refresh() {
-  S.items.forEach(it => { if (!it.el.classList.contains("failed")) it.badge.textContent = label(it); });
+  S.items.forEach(it => { if (!it.el.classList.contains("failed")) it.badge.textContent = it.orig ? "Originale" : label(it); });
   const n = S.items.length, ready = S.items.filter(i => i.proc && !i.el.classList.contains("working")).length;
   const c = $("count"); const txt = `${n} / ${MAX}`;
   if (c.textContent !== txt) { c.textContent = txt; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
@@ -298,46 +435,118 @@ function refresh() {
 }
 
 // ---------- salvataggio e condivisione ----------
+// I file seguono sempre l'ordine della griglia: 01-copertina.jpg, 02.jpg, 03.jpg…
 const blobToB64 = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(b); });
-const fname = i => `vinted-${String(i + 1).padStart(2, "0")}.jpg`;
+const fname = i => i === 0 ? "01-copertina.jpg" : `${String(i + 1).padStart(2, "0")}.jpg`;
+const isCancel = e => /cancel|annull|abort/i.test(String(e && (e.message || e)));
+const pad2 = n => String(n).padStart(2, "0");
 
-async function writeAll(directory, folder) {
+function folderName() {
+  const clean = t => String(t || "").replace(/[\\/:*?"<>|\u0000-\u001f#%]/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 50).trim();
+  const fromTitle = clean(S.text && S.text.titolo);
+  if (fromTitle) return fromTitle;
+  const d = new Date();
+  return `Annuncio ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}.${pad2(d.getMinutes())}`;
+}
+function photosReady() {
+  const ok = S.items.filter(i => !i.el.classList.contains("failed"));
+  if (!ok.length) { setStatus("Nessuna foto da salvare.", true); return false; }
+  if (ok.some(i => i.el.classList.contains("working") || !i.outPromise)) { setStatus("Aspetta un attimo: sto ancora sistemando le foto.", true); return false; }
+  return true;
+}
+async function orderedBlobs() {
+  const ok = S.items.filter(i => !i.el.classList.contains("failed"));
+  return (await Promise.all(ok.map(i => i.outPromise))).filter(Boolean);
+}
+async function writeAll(blobs, directory, folder) {
   const uris = [];
-  const blobs = (await Promise.all(S.items.map(i => i.outPromise))).filter(Boolean);
   for (let i = 0; i < blobs.length; i++) {
     const r = await Filesystem.writeFile({ path: `${folder}/${fname(i)}`, data: await blobToB64(blobs[i]), directory, recursive: true });
     uris.push(r.uri);
   }
   return uris;
 }
+function busy(id, on) { const b = $(id); if (b) b.disabled = on; }
+
 on("shareAll", async () => {
-  if (!native || !Filesystem || !Share) return browserDownload();
+  if (!photosReady()) return;
+  const blobs = await orderedBlobs();
+  if (!native || !Filesystem || !Share) return browserDownload(blobs);
+  busy("shareAll", true);
   try {
     setStatus("Preparo le foto…");
-    const files = await writeAll("CACHE", "condividi");
+    try { await Filesystem.rmdir({ path: "condividi", directory: "CACHE", recursive: true }); } catch (_) {}
+    const files = await writeAll(blobs, "CACHE", "condividi");
     await Share.share({ title: "Foto annuncio", files });
-    setStatus("Foto condivise.");
+    setStatus("Foto condivise nell'ordine della griglia.");
   } catch (e) {
-    if (!/cancel/i.test(String(e && e.message))) setStatus("Condivisione non riuscita. Prova «Salva nel telefono».", true);
-    else refresh();
-  }
+    if (!isCancel(e)) setStatus("Condivisione non riuscita. Prova «Salva nel telefono».", true); else refresh();
+  } finally { busy("shareAll", false); }
 });
+
 on("saveAll", async () => {
-  if (!native || !Filesystem) return browserDownload();
+  if (!photosReady()) return;
+  const blobs = await orderedBlobs(), folder = folderName();
+  if (!native || (!Gallery && !Filesystem)) return browserDownload(blobs);
+  busy("saveAll", true);
   try {
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    await writeAll("DOCUMENTS", `AnnuncioPronto/${stamp}`);
-    setStatus(`Foto salvate in Documenti › AnnuncioPronto › ${stamp}`);
-  } catch (_) { setStatus("Salvataggio non riuscito. Usa «Condividi tutte» e scegli Google Foto o File.", true); }
+    if (Gallery) {
+      // date crescenti: anche la Galleria mostra le foto nell'ordine della griglia
+      const base = Date.now() - blobs.length * 1000;
+      for (let i = 0; i < blobs.length; i++) {
+        setStatus(`Salvo nella Galleria… ${i + 1} di ${blobs.length}`);
+        await Gallery.saveImage({ data: await blobToB64(blobs[i]), folder, fileName: fname(i), time: base + i * 1000 });
+      }
+      setStatus(`Salvate ${blobs.length} foto nella Galleria › AnnuncioPronto › ${folder}`);
+    } else {
+      await writeAll(blobs, "DOCUMENTS", `AnnuncioPronto/${folder}`);
+      setStatus(`Foto salvate in Documenti › AnnuncioPronto › ${folder}`);
+    }
+  } catch (e) {
+    setStatus("Salvataggio non riuscito" + (e && e.message ? ` (${e.message})` : "") + ". Prova «Scarica ZIP» o «Condividi tutte».", true);
+  } finally { busy("saveAll", false); }
 });
-async function browserDownload() {
-  const blobs = (await Promise.all(S.items.map(i => i.outPromise))).filter(Boolean);
-  blobs.forEach((b, i) => {
-    const u = URL.createObjectURL(b);
-    const a = document.createElement("a"); a.href = u; a.download = fname(i); document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(u), 4000);
-  });
+
+let jszipLoading = null;
+function loadJSZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  return jszipLoading || (jszipLoading = new Promise((res, rej) => {
+    const sc = document.createElement("script"); sc.src = "vendor/jszip.min.js";
+    sc.onload = () => window.JSZip ? res(window.JSZip) : rej(new Error("JSZip non disponibile"));
+    sc.onerror = () => { jszipLoading = null; rej(new Error("JSZip non caricato")); };
+    document.head.append(sc);
+  }));
 }
+on("zipAll", async () => {
+  if (!photosReady()) return;
+  busy("zipAll", true);
+  try {
+    setStatus("Preparo lo ZIP…");
+    const [JSZip, blobs] = await Promise.all([loadJSZip(), orderedBlobs()]);
+    const folder = folderName(), zip = new JSZip(), dir = zip.folder(folder), base = Date.now() - blobs.length * 1000;
+    blobs.forEach((b, i) => dir.file(fname(i), b, { binary: true, date: new Date(base + i * 1000) }));
+    const zipName = folder.replace(/\s+/g, "-") + ".zip";
+    if (native && Filesystem && Share) {
+      const data = await zip.generateAsync({ type: "base64", compression: "STORE" });
+      try { await Filesystem.rmdir({ path: "zip", directory: "CACHE", recursive: true }); } catch (_) {}
+      const r = await Filesystem.writeFile({ path: `zip/${zipName}`, data, directory: "CACHE", recursive: true });
+      await Share.share({ title: zipName, files: [r.uri] });
+      setStatus(`ZIP pronto: ${zipName}`);
+    } else {
+      downloadBlob(await zip.generateAsync({ type: "blob", compression: "STORE" }), zipName);
+      setStatus(`ZIP scaricato: ${zipName}`);
+    }
+  } catch (e) {
+    if (isCancel(e)) refresh(); else setStatus("ZIP non riuscito" + (e && e.message ? ` (${e.message})` : "") + ".", true);
+  } finally { busy("zipAll", false); }
+});
+
+function downloadBlob(b, name) {
+  const u = URL.createObjectURL(b);
+  const a = document.createElement("a"); a.href = u; a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+function browserDownload(blobs) { blobs.forEach((b, i) => downloadBlob(b, fname(i))); }
 
 // ---------- testo con Claude ----------
 function buildPrompt(n) {
@@ -592,6 +801,7 @@ on("reset", () => {
   }
   b.dataset.sure = ""; b.textContent = "+ Nuovo annuncio"; b.hidden = true;
   S.items.forEach(it => { it.ver++; it.el.remove(); });
+  $("grid").classList.remove("sorting");
   S.items = []; S.text = null; S.histId = null;
   ["brand", "size", "notes"].forEach(id => { $(id).value = ""; });
   $("cond").value = "Ottime condizioni";
@@ -600,5 +810,17 @@ on("reset", () => {
   $("status").classList.remove("err");
   refresh();
   window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+
+// ---------- caricamento iniziale ----------
+// La splash nativa (bianca, col logo) si chiude appena la pagina è pronta; la splash
+// in pagina continua con la stessa grafica e un'animazione, poi si dissolve.
+section("splash", () => {
+  const SplashScreen = plugin("SplashScreen");
+  if (SplashScreen) { try { Promise.resolve(SplashScreen.hide({ fadeOutDuration: 120 })).catch(() => {}); } catch (_) {} }
+  const el = $("splash");
+  if (!el) return;
+  const wait = Math.max(0, 750 - performance.now());
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 320); }, wait);
 });
 })();

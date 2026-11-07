@@ -9,45 +9,32 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="wrap">
+<div id="splash" aria-hidden="true"><img src="logo.png" alt="" width="112" height="112"></div>
+
+<main class="tab wrap" id="tab-home">
   <header>
-    <div class="top">
-      <div class="label">Per Vinted · scarpe, abbigliamento, capispalla</div>
-      <button class="btn small" id="openSettings" type="button">Impostazioni</button>
-    </div>
+    <div class="label">Per Vinted · scarpe, abbigliamento, capispalla</div>
     <h1>Annuncio Pronto</h1>
     <p>Aggiungi le foto: le sistemo subito. Poi scrivo titolo, descrizione e hashtag.</p>
   </header>
 
-  <section class="panel" id="settings" hidden>
-    <h2>Impostazioni</h2>
-    <div class="field">
-      <label class="label" for="apiKey">Chiave API Anthropic</label>
-      <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
-      <span class="hint">Serve per scrivere le descrizioni. Resta salvata solo su questo telefono. La crei su console.anthropic.com.</span>
-    </div>
-    <div class="field">
-      <span class="label">Modello</span>
-      <div class="seg" id="model">
-        <button type="button" data-v="claude-haiku-5-5" aria-pressed="true">Veloce</button>
-        <button type="button" data-v="claude-sonnet-5-5" aria-pressed="false">Più accurato</button>
-      </div>
-      <span class="hint">Veloce costa meno e risponde in pochi secondi.</span>
-    </div>
-    <button class="btn primary" id="saveSettings" type="button">Salva impostazioni</button>
-  </section>
+  <div class="notice" id="keyNotice" hidden>
+    <span>Per scrivere le descrizioni serve la chiave API di Anthropic.</span>
+    <button class="linkbtn" type="button" data-goto="settings">Aggiungila in Impostazioni →</button>
+  </div>
 
   <section class="panel">
     <div class="step"><span class="n">1</span><h2>Foto</h2><span class="count" id="count">0 / 20</span></div>
     <button class="drop" type="button" id="drop">
       <strong>+ Aggiungi foto</strong>
-      <span>Fino a 20 foto. La prima è la copertina. Tieni premuta una foto per vedere l'originale.</span>
+      <span>Fino a 20 foto. La prima è la copertina. Tieni premuta una foto e trascinala per cambiare l'ordine.</span>
     </button>
     <input type="file" id="file" accept="image/*" multiple>
     <div class="grid" id="grid"></div>
     <div class="toolbar" id="photoTools" hidden>
       <button class="btn primary" id="shareAll" type="button">Condividi tutte</button>
       <button class="btn" id="saveAll" type="button">Salva nel telefono</button>
+      <button class="btn" id="zipAll" type="button">Scarica ZIP</button>
     </div>
   </section>
 
@@ -112,7 +99,54 @@
     <span class="hint">Tocca un annuncio per rivederlo e ricopiarne il testo. Restano salvati solo su questo telefono.</span>
     <ul class="hist" id="histList"></ul>
   </section>
-</div>
+</main>
+
+<main class="tab wrap" id="tab-settings" hidden>
+  <header>
+    <div class="label">Annuncio Pronto</div>
+    <h1>Impostazioni</h1>
+  </header>
+  <section class="panel" id="settings">
+    <h2>Claude</h2>
+    <div class="field">
+      <label class="label" for="apiKey">Chiave API Anthropic</label>
+      <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-…">
+      <span class="hint">Serve per scrivere le descrizioni. Resta salvata solo su questo telefono. La crei su console.anthropic.com.</span>
+    </div>
+    <div class="field">
+      <span class="label">Modello</span>
+      <div class="seg" id="model">
+        <button type="button" data-v="claude-haiku-5-5" aria-pressed="true">Veloce</button>
+        <button type="button" data-v="claude-sonnet-5-5" aria-pressed="false">Più accurato</button>
+      </div>
+      <span class="hint">Veloce costa meno e risponde in pochi secondi.</span>
+    </div>
+    <button class="btn primary" id="saveSettings" type="button">Salva impostazioni</button>
+    <div class="status" id="settingsStatus" role="status"></div>
+  </section>
+  <section class="panel about">
+    <h2>Informazioni</h2>
+    <div class="aboutrow"><img src="logo.png" alt="" width="48" height="48"><div><strong>Annuncio Pronto</strong><span class="hint" id="appVersion">Versione 1.0</span></div></div>
+    <p>Sistema le foto per Vinted (luce, colori, ritaglio) direttamente sul telefono e scrive titolo, descrizione e hashtag con Claude di Anthropic.</p>
+    <ul class="facts">
+      <li>Le foto vengono sistemate sul telefono, anche senza internet.</li>
+      <li>Per il testo vengono inviate a Claude solo le prime 5 foto, ridotte.</li>
+      <li>La chiave API e lo storico restano solo su questo telefono.</li>
+      <li>Le foto salvate finiscono nella Galleria, in Immagini › AnnuncioPronto.</li>
+    </ul>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Sezioni">
+  <button type="button" data-tab="home" aria-current="page">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+    <span>Home</span>
+  </button>
+  <button type="button" data-tab="settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    <span>Impostazioni</span>
+  </button>
+</nav>
 <script src="errors.js"></script>
 <script src="enhance.js"></script>
 <script src="app.js"></script>

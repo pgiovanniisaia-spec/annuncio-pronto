@@ -8,6 +8,12 @@ App Android (Capacitor 7) che sistema le foto per Vinted e scrive titolo, descri
   - `enhance.js` — correzione foto (usata sia dalla pagina sia dal worker).
   - `worker.js` — Web Worker che applica `enhancePixels` senza bloccare lo schermo.
   - `errors.js` — riquadro errori in fondo allo schermo (caricato prima di `app.js`).
+  - `vendor/jszip.min.js` — JSZip locale (niente CDN), caricato solo quando serve lo ZIP.
+  - `logo.png` — logo della schermata di caricamento e delle Impostazioni.
+- Interfaccia: due schede (Home, Impostazioni) con barra fissa in basso; foto riordinabili trascinandole (pressione lunga, Pointer Events); pulsante occhio per vedere l'originale.
+- `plugins/gallery-saver/` — plugin Capacitor locale (Java) `GallerySaver.saveImage({data, folder, fileName, time})`: salva in `Pictures/AnnuncioPronto/<cartella>` via MediaStore, con date crescenti. Collegato in `package.json` come `file:plugins/gallery-saver`.
+- `scripts/android-setup.mjs` — da eseguire dopo `npx cap sync android`: configura la splash di Android 12+ (sfondo bianco, `assets/android/splash_icon.png`).
+- `signing/debug.keystore` — keystore di debug fisso usato dal workflow (password `android`).
 - `capacitor.config.json` — appId `it.annunciopronto.app`, `CapacitorHttp` attivo (le chiamate `fetch` all'API passano dal lato nativo, niente problemi CORS).
 - `assets/icon.png` — icona sorgente 1024×1024 per `@capacitor/assets`.
 - La cartella `android/` NON è inclusa: va generata (vedi sotto).
@@ -20,7 +26,7 @@ App Android (Capacitor 7) che sistema le foto per Vinted e scrive titolo, descri
 2. `npm install`
 3. `npx cap add android` (solo la prima volta)
 4. `npm run icons` (genera le icone dell'app da `assets/icon.png`)
-5. `npx cap sync android`
+5. `npx cap sync android` e poi `node scripts/android-setup.mjs`
 6. Compila: `cd android && ./gradlew assembleDebug` (su Windows `gradlew.bat assembleDebug`)
 7. L'APK è in `android/app/build/outputs/apk/debug/app-debug.apk`. Copialo in una cartella facile da trovare (es. la cartella del progetto come `AnnuncioPronto.apk`) e spiega all'utente come installarlo:
    - collegare il telefono via USB con "Debug USB" attivo ed eseguire `adb install -r AnnuncioPronto.apk`, oppure
@@ -30,13 +36,18 @@ Se la versione 7 di Capacitor non è più l'ultima, va bene restare sulla 7; agg
 
 ## Permessi Android
 - Fotocamera e galleria passano dal selettore file della WebView: non servono permessi extra.
-- `Filesystem` scrive in Documenti/AnnuncioPronto e nella cache per la condivisione. Se su qualche versione di Android il salvataggio fallisce, la soluzione preferita è salvare in `Pictures/AnnuncioPronto` tramite MediaStore (plugin nativo piccolo o `@capacitor-community/media`), così le foto compaiono nella Galleria.
+- «Salva nel telefono» usa il plugin `GallerySaver` (MediaStore, nessun permesso da Android 10; fino ad Android 9 chiede il permesso di scrittura). Se il plugin manca, ripiega su `Filesystem` in Documenti/AnnuncioPronto.
+- `Filesystem` scrive nella cache per «Condividi tutte» e «Scarica ZIP».
+- File sempre nell'ordine della griglia: `01-copertina.jpg`, `02.jpg`, … Cartella = titolo dell'annuncio, oppure «Annuncio AAAA-MM-GG HH.MM».
 
 ## Plugin senza bundler
 `window.Capacitor` arriva dal ponte nativo: espone i plugin in `Capacitor.Plugins.Nome` e NON ha `registerPlugin` (che esiste solo importando `@capacitor/core` con un bundler). In `app.js` i plugin si prendono con `plugin("Nome")`, che restituisce `null` se mancano: un plugin assente non deve mai fermare l'app.
 
 ## Firma dell'APK
-Il workflow mette il secret `DEBUG_KEYSTORE_BASE64` in `~/.android/debug.keystore` (password `android`, alias `androiddebugkey`), così tutte le build hanno la stessa firma e si installano sopra le precedenti.
+Il workflow mette in `~/.android/debug.keystore` il secret `DEBUG_KEYSTORE_BASE64` se esiste, altrimenti `signing/debug.keystore` (password `android`, alias `androiddebugkey`): tutte le build hanno la stessa firma e si installano sopra le precedenti. Non cambiare questo keystore, o l'utente dovrà disinstallare l'app.
+
+## Splash
+`@capacitor/splash-screen`: splash nativa bianca col logo, nascosta da `app.js` appena la pagina è pronta (massimo 1,5 s, `capacitor.config.json`). Poi la splash in pagina (`#splash`) anima il logo e si dissolve. Le icone si generano con `npm run icons` (splash bianca).
 
 ## Prova nel browser
 `npm run serve` e apri http://localhost:8080 — la sistemazione foto funziona; condividi/salva scaricano i file.
@@ -49,6 +60,4 @@ Il workflow mette il secret `DEBUG_KEYSTORE_BASE64` in `~/.android/debug.keystor
 
 ## Idee per i prossimi passi (se l'utente le chiede)
 - Rimozione completa dello sfondo sul telefono (modello di segmentazione, es. MediaPipe o ONNX Runtime Web incluso nell'app).
-- Salvataggio diretto nella Galleria.
-- Storico degli annunci creati.
 - APK firmato per release (`assembleRelease` con keystore) o pubblicazione sul Play Store.
