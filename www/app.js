@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const MAX = 20;          // foto per annuncio, come Vinted
 const AI_PHOTOS = 5;     // foto inviate a Claude (le prime)
-const WORK_SIDE = 2000;  // lato lungo della copia di lavoro
+const WORK_SIDE = 1500;  // larghezza di decodifica della copia di lavoro
 const S = { items: [], cat: "Scarpe", tone: "amichevole", fmt: "34", writing: false, text: null };
 let nextId = 1;
 
@@ -78,38 +78,42 @@ function enqueue(fn) { return new Promise((res, rej) => { queue.push(() => fn().
 function pump() { while (active < 3 && queue.length) { active++; queue.shift()().finally(() => { active--; pump(); }); } }
 
 // ---------- aggiunta foto ----------
-const drop = $("drop");
+const drop = $("drop"), fileInput = $("file");
+drop.addEventListener("click", () => fileInput.click());
 ["dragover", "dragenter"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach(t => drop.addEventListener(t, () => drop.classList.remove("over")));
 drop.addEventListener("drop", e => { e.preventDefault(); addFiles(e.dataTransfer.files); });
-$("file").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
+fileInput.addEventListener("change", () => { const f = [...(fileInput.files || [])]; fileInput.value = ""; addFiles(f); });
 
 function addFiles(list) {
-  const files = [...list].filter(f => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic)$/i.test(f.name));
+  // Su Android il selettore spesso restituisce file senza tipo né estensione: li accettiamo e
+  // lasciamo decidere alla decodifica.
+  const files = [...list].filter(f => !f.type || f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name || ""));
+  if (!files.length) { setStatus("Nessuna foto ricevuta. Riprova scegliendo dalla Galleria.", true); return; }
   let skipped = 0;
   $("status").classList.remove("err");
   for (const f of files) {
     if (S.items.length >= MAX) { skipped++; continue; }
-    const it = { id: nextId++, file: f, thumb: URL.createObjectURL(f), rot: 0, box: null, boxRot: 0, src: null, ver: 0, out: null, outUrl: null };
+    const it = { id: nextId++, file: f, rot: 0, box: null, boxRot: 0, src: null, ver: 0, out: null, outPromise: null };
     S.items.push(it); makeTile(it);
-    enqueue(() => prepare(it).then(() => renderItem(it))).catch(() => failTile(it));
+    enqueue(() => prepare(it).then(() => { drawTile(it, rotated(it.src, it.rot)); return renderItem(it); })).catch(() => failTile(it));
   }
   refresh();
   if (skipped) setStatus(`Massimo ${MAX} foto: ${skipped} non aggiunte.`, true);
 }
 
 async function loadBitmap(file) {
-  try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
-  catch (_) {
-    return await new Promise((res, rej) => {
-      const im = new Image(); const u = URL.createObjectURL(file);
-      im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = rej; im.src = u;
-    });
-  }
+  // Decodifica già ridotta: molto più veloce delle foto da 12+ megapixel.
+  try { return await createImageBitmap(file, { imageOrientation: "from-image", resizeWidth: WORK_SIDE, resizeQuality: "medium" }); } catch (_) {}
+  try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch (_) {}
+  return await new Promise((res, rej) => {
+    const im = new Image(); const u = URL.createObjectURL(file);
+    im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = () => { URL.revokeObjectURL(u); rej(new Error("decode")); }; im.src = u;
+  });
 }
 async function prepare(it) {
   const bmp = await loadBitmap(it.file);
-  const k = Math.min(1, WORK_SIDE / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, (WORK_SIDE * 4 / 3) / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas");
   c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(bmp, 0, 0, c.width, c.height);
@@ -177,55 +181,89 @@ async function renderItem(it) {
   const sx0 = Math.max(0, rx), sy0 = Math.max(0, ry), sx1 = Math.min(W, rx + rw), sy1 = Math.min(H, ry + rh), k = OW / rw;
   x.imageSmoothingQuality = "high";
   x.drawImage(Src, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - rx) * k, (sy0 - ry) * k, (sx1 - sx0) * k, (sy1 - sy0) * k);
+  drawTile(it, out); // il nuovo taglio si vede subito
 
   const img = await enhanceAsync(x.getImageData(0, 0, OW, OH), $("whiten").checked);
   if (v !== it.ver || !S.items.includes(it)) return;
   x.putImageData(img, 0, 0);
-  const blob = await new Promise(r => out.toBlob(r, "image/jpeg", 0.92));
-  if (v !== it.ver || !S.items.includes(it)) return;
-  if (it.outUrl) URL.revokeObjectURL(it.outUrl);
-  it.out = blob; it.outUrl = URL.createObjectURL(blob);
-  it.img.src = it.outUrl;
+  drawTile(it, out);
+  saveProcessed(it);
   setWorking(it, false);
+  it.el.classList.remove("done"); void it.el.offsetWidth; it.el.classList.add("done");
+  // il JPG finale si prepara in sottofondo, serve solo per salvare o condividere
+  it.out = null;
+  it.outPromise = new Promise(r => out.toBlob(r, "image/jpeg", 0.92)).then(b => { if (v === it.ver) { it.out = b; refresh(); } return b; });
   refresh();
 }
 
 let rerenderTimer = 0;
 function rerenderAll() {
   clearTimeout(rerenderTimer);
-  rerenderTimer = setTimeout(() => S.items.forEach(it => { if (it.src) enqueue(() => renderItem(it)); }), 120);
+  rerenderTimer = setTimeout(() => S.items.forEach(it => { if (it.src) enqueue(() => renderItem(it)); }), 80);
 }
 
 // ---------- griglia ----------
+const TILE_W = 240;
+function tileH() { return S.fmt === "34" ? 320 : 240; }
+function drawTile(it, source) {
+  const c = it.cv, h = tileH();
+  if (c.width !== TILE_W || c.height !== h) { c.width = TILE_W; c.height = h; }
+  const x = c.getContext("2d"), s = Math.max(TILE_W / source.width, h / source.height);
+  const w = source.width * s, hh = source.height * s;
+  x.imageSmoothingQuality = "medium";
+  x.drawImage(source, (TILE_W - w) / 2, (h - hh) / 2, w, hh);
+  it.el.classList.add("has-img");
+}
+function saveProcessed(it) {
+  const p = it.proc || (it.proc = document.createElement("canvas"));
+  p.width = it.cv.width; p.height = it.cv.height; p.getContext("2d").drawImage(it.cv, 0, 0);
+}
 function makeTile(it) {
   const t = document.createElement("div"); t.className = "tile working";
-  const img = document.createElement("img"); img.alt = "Foto"; img.src = it.thumb;
+  t.style.animationDelay = Math.min(S.items.length - 1, 10) * 30 + "ms";
+  const cv = document.createElement("canvas"); cv.width = TILE_W; cv.height = tileH();
   const badge = document.createElement("span"); badge.className = "badge";
   const x = document.createElement("button"); x.type = "button"; x.className = "ico x"; x.textContent = "×"; x.setAttribute("aria-label", "Rimuovi foto");
   const r = document.createElement("button"); r.type = "button"; r.className = "ico rot"; r.textContent = "↻"; r.setAttribute("aria-label", "Ruota foto");
   x.onclick = e => { e.stopPropagation(); removeItem(it); };
-  r.onclick = e => { e.stopPropagation(); it.rot = (it.rot + 90) % 360; enqueue(() => renderItem(it)); };
+  r.onclick = e => {
+    e.stopPropagation(); it.rot = (it.rot + 90) % 360;
+    r.classList.remove("spin"); void r.offsetWidth; r.classList.add("spin");
+    enqueue(() => renderItem(it));
+  };
   // tieni premuto per vedere l'originale
-  const showOrig = on => { if (it.outUrl) { img.src = on ? it.thumb : it.outUrl; badge.textContent = on ? "Originale" : label(it); } };
-  t.addEventListener("pointerdown", e => { if (e.target === t || e.target === img) showOrig(true); });
+  let holding = false;
+  const showOrig = on => {
+    if (!it.proc || !it.src || holding === on) return;
+    holding = on;
+    drawTile(it, on ? rotated(it.src, it.rot) : it.proc);
+    badge.textContent = on ? "Originale" : label(it);
+  };
+  t.addEventListener("pointerdown", e => { if (e.target === t || e.target === cv) showOrig(true); });
   ["pointerup", "pointerleave", "pointercancel"].forEach(ev => t.addEventListener(ev, () => showOrig(false)));
   t.addEventListener("contextmenu", e => e.preventDefault());
-  t.append(img, badge, x, r);
-  it.el = t; it.img = img; it.badge = badge;
+  t.append(cv, badge, x, r);
+  it.el = t; it.cv = cv; it.badge = badge;
   $("grid").append(t);
 }
 function label(it) { return S.items[0] === it ? "Copertina" : String(S.items.indexOf(it) + 1); }
 function setWorking(it, on) { it.el && it.el.classList.toggle("working", on); }
-function failTile(it) { setWorking(it, false); it.badge.textContent = "Errore"; setStatus("Una foto non si apre: prova con un JPG o PNG.", true); }
+function failTile(it) {
+  setWorking(it, false); it.el.classList.add("failed");
+  setStatus("Una foto non si apre (formato non supportato). Toccala con × e prova con un'altra.", true);
+  it.badge.textContent = "Errore";
+}
 function removeItem(it) {
-  it.ver++; S.items = S.items.filter(x => x !== it); it.el.remove();
-  URL.revokeObjectURL(it.thumb); if (it.outUrl) URL.revokeObjectURL(it.outUrl);
+  it.ver++; S.items = S.items.filter(x => x !== it);
+  it.el.classList.add("leaving");
+  setTimeout(() => it.el.remove(), 180);
   refresh();
 }
 function refresh() {
-  S.items.forEach(it => { it.badge.textContent = label(it); });
-  const n = S.items.length, ready = S.items.filter(i => i.out).length;
-  $("count").textContent = `${n} / ${MAX}`;
+  S.items.forEach(it => { if (!it.el.classList.contains("failed")) it.badge.textContent = label(it); });
+  const n = S.items.length, ready = S.items.filter(i => i.proc && !i.el.classList.contains("working")).length;
+  const c = $("count"); const txt = `${n} / ${MAX}`;
+  if (c.textContent !== txt) { c.textContent = txt; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
   $("photoTools").hidden = !ready;
   $("go").disabled = !n || S.writing;
   if (!S.writing && !$("status").classList.contains("err")) {
@@ -239,9 +277,9 @@ const fname = i => `vinted-${String(i + 1).padStart(2, "0")}.jpg`;
 
 async function writeAll(directory, folder) {
   const uris = [];
-  const ready = S.items.filter(i => i.out);
-  for (let i = 0; i < ready.length; i++) {
-    const r = await Filesystem.writeFile({ path: `${folder}/${fname(i)}`, data: await blobToB64(ready[i].out), directory, recursive: true });
+  const blobs = (await Promise.all(S.items.map(i => i.outPromise))).filter(Boolean);
+  for (let i = 0; i < blobs.length; i++) {
+    const r = await Filesystem.writeFile({ path: `${folder}/${fname(i)}`, data: await blobToB64(blobs[i]), directory, recursive: true });
     uris.push(r.uri);
   }
   return uris;
@@ -266,9 +304,12 @@ $("saveAll").onclick = async () => {
     setStatus(`Foto salvate in Documenti › AnnuncioPronto › ${stamp}`);
   } catch (_) { setStatus("Salvataggio non riuscito. Usa «Condividi tutte» e scegli Google Foto o File.", true); }
 };
-function browserDownload() {
-  S.items.filter(i => i.out).forEach((it, i) => {
-    const a = document.createElement("a"); a.href = it.outUrl; a.download = fname(i); document.body.append(a); a.click(); a.remove();
+async function browserDownload() {
+  const blobs = (await Promise.all(S.items.map(i => i.outPromise))).filter(Boolean);
+  blobs.forEach((b, i) => {
+    const u = URL.createObjectURL(b);
+    const a = document.createElement("a"); a.href = u; a.download = fname(i); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
   });
 }
 
@@ -358,6 +399,7 @@ $("go").onclick = async () => {
   if (!ready.length) { setStatus("Aspetta che le foto siano pronte.", true); return; }
   S.writing = true; $("go").disabled = true;
   $("resText").hidden = false;
+  $("resText").classList.remove("show"); void $("resText").offsetWidth; $("resText").classList.add("show");
   $("out").innerHTML = '<div class="skel"><i></i><i></i><i></i><i></i></div>';
   $("resText").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   let ai = null, note = "";
@@ -411,12 +453,12 @@ function block(label, text, cls) {
 }
 async function copy(text, el) {
   const old = el.textContent;
-  try { await navigator.clipboard.writeText(text); el.textContent = "Copiato"; }
+  try { await navigator.clipboard.writeText(text); el.textContent = "Copiato ✓"; el.classList.add("ok"); }
   catch (_) {
     const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select();
     let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
     ta.remove(); el.textContent = ok ? "Copiato" : "Seleziona a mano";
   }
-  setTimeout(() => { el.textContent = old; }, 1500);
+  setTimeout(() => { el.textContent = old; el.classList.remove("ok"); }, 1500);
 }
 })();
