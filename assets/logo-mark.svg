@@ -1,10 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- ListLab: cartellino del prezzo verticale con spunta ("annuncio pronto").
-       Solo il simbolo (chiaro), sfondo trasparente: il fondo verde scuro lo aggiunge scripts/render-logo.js. -->
-  <g transform="translate(0 20)">
-    <path d="M352 400 L512 250 L672 400 V720 Q672 750 642 750 H382 Q352 750 352 720 Z"
-          fill="#EEF0EC" stroke="#EEF0EC" stroke-width="56" stroke-linejoin="round"/>
-    <circle cx="512" cy="372" r="38" fill="#23584A"/>
-    <path d="M418 568 L486 636 L612 506" fill="none" stroke="#23584A" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- ListLab: beuta da laboratorio (Lab) con la L e una scintilla (IA). Proposta "I6" scelta dall'utente.
+       Solo il simbolo, sfondo trasparente: il fondo verde scuro lo aggiunge scripts/render-logo.js. -->
+  <defs><clipPath id="ll-flask"><path d="M458 236 H566 V418 L716 716 Q738 776 676 776 H348 Q286 776 308 716 L458 418 Z"/></clipPath></defs>
+  <g transform="translate(0 46)">
+    <path d="M458 236 H566 V418 L716 716 Q738 776 676 776 H348 Q286 776 308 716 L458 418 Z" fill="#EEF0EC" stroke="#EEF0EC" stroke-width="36" stroke-linejoin="round"/>
+    <g clip-path="url(#ll-flask)"><path d="M200 610 Q330 574 460 610 T720 610 T980 610 V900 H200 Z" fill="#7FC4AE"/></g>
+    <path d="M448 520 V670 H552" fill="none" stroke="#23584A" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M588 504 Q593.28 542.72 632 548 Q593.28 553.28 588 592 Q582.72 553.28 544 548 Q582.72 542.72 588 504 Z" fill="#23584A"/>
+    <rect x="432" y="212" width="160" height="40" rx="20" fill="#EEF0EC"/>
+    <circle cx="606" cy="156" r="22" fill="#7FC4AE"/>
+    <circle cx="568" cy="104" r="14" fill="#7FC4AE"/>
   </g>
 </svg>
