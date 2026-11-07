@@ -21,6 +21,17 @@ if (existsSync(stringsPath)) {
   console.log(`Nome dell'app: ${config.appName}`);
 }
 
+// 1b) Permesso fotocamera per la fotocamera guidata (camera-preview e @capacitor/camera non lo dichiarano)
+const manifestPath = "android/app/src/main/AndroidManifest.xml";
+if (existsSync(manifestPath)) {
+  let mf = readFileSync(manifestPath, "utf8");
+  const add = [];
+  if (!mf.includes("android.permission.CAMERA")) add.push('    <uses-permission android:name="android.permission.CAMERA" />');
+  if (!mf.includes("android.hardware.camera")) add.push('    <uses-feature android:name="android.hardware.camera" android:required="false" />');
+  if (add.length) { mf = mf.replace("</manifest>", add.join("\n") + "\n</manifest>"); writeFileSync(manifestPath, mf); }
+  console.log("Permesso fotocamera presente nel manifest.");
+}
+
 // 2) Colori (chiaro e scuro)
 const colors = (bar, light) => `<?xml version="1.0" encoding="utf-8"?>
 <resources>

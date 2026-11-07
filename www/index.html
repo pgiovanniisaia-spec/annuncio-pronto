@@ -72,7 +72,7 @@
 
   <section class="panel soon" aria-disabled="true">
     <div class="step"><h2>Modifica con AI (OpenAI)</h2><span class="pill">In arrivo</span></div>
-    <p class="hint">Sfondi da studio e manichino invisibile generati dall'intelligenza artificiale. Lo colleghiamo nel prossimo aggiornamento.</p>
+    <p class="hint">Sfondi da studio e manichino invisibile generati dall'intelligenza artificiale. Serve la chiave OpenAI in Impostazioni; il capo resta identico, cambia solo lo sfondo.</p>
     <div class="choices" id="aiEditModes">
       <label class="choice"><input type="radio" name="aiEdit" value="studio-white" disabled checked><span><strong>Sfondo bianco da studio</strong><small>Fondo bianco pulito con ombra morbida</small></span></label>
       <label class="choice"><input type="radio" name="aiEdit" value="neutral" disabled><span><strong>Sfondo neutro</strong><small>Grigio chiaro o beige uniforme</small></span></label>
@@ -102,6 +102,11 @@
 
   <section class="panel">
     <div class="step"><span class="n">1</span><h2>Foto</h2><span class="count" id="count">0 / 20</span></div>
+    <button class="guided-cta" type="button" id="guidedStart">
+      <span class="gc-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c.5 4.2 2.8 6.5 7 7-4.2.5-6.5 2.8-7 7-.5-4.2-2.8-6.5-7-7 4.2-.5 6.5-2.8 7-7z"/></svg></span>
+      <span><strong id="guidedStartLabel">Nuovo annuncio guidato</strong><small>Scegli la categoria · Cappotto: copertina da negozio, fronte, retro e dettagli</small></span>
+      <span class="gc-arrow" aria-hidden="true">›</span>
+    </button>
     <button class="drop" type="button" id="drop">
       <strong>+ Aggiungi foto</strong>
       <span>Fino a 20 foto. La prima è la copertina. Tocca una foto per vederla grande; tienila premuta e trascinala per cambiare l'ordine.</span>
@@ -128,6 +133,16 @@
     <div class="row">
       <div class="field"><label class="label" for="brand">Marca</label><input type="text" id="brand" placeholder="Se la conosci"></div>
       <div class="field"><label class="label" for="size">Taglia</label><input type="text" id="size" placeholder="es. 42 EU"></div>
+    </div>
+    <div class="field"><label class="label" for="material">Materiale</label><input type="text" id="material" placeholder="es. 80% lana, 20% cashmere"></div>
+    <div class="field" id="measuresField" hidden>
+      <span class="label">Misure in cm (facoltative)</span>
+      <div class="mgrid">
+        <label><span>Spalle</span><input type="number" inputmode="decimal" id="mShoulders" min="0" max="300" placeholder="cm"></label>
+        <label><span>Ascella-ascella</span><input type="number" inputmode="decimal" id="mPit" min="0" max="300" placeholder="cm"></label>
+        <label><span>Lunghezza</span><input type="number" inputmode="decimal" id="mLength" min="0" max="300" placeholder="cm"></label>
+        <label><span>Manica</span><input type="number" inputmode="decimal" id="mSleeve" min="0" max="300" placeholder="cm"></label>
+      </div>
     </div>
     <div class="field">
       <label class="label" for="cond">Condizioni</label>
@@ -202,6 +217,26 @@
       </div>
       <span class="hint">Veloce costa meno e risponde in pochi secondi.</span>
     </div>
+    <h2 class="subhead">OpenAI · foto con AI</h2>
+    <div class="field">
+      <label class="label" for="openaiKey">Chiave API OpenAI</label>
+      <input type="password" id="openaiKey" autocomplete="off" placeholder="sk-…">
+      <span class="hint">Serve per la copertina da studio e per pulire lo sfondo di fronte e retro. Resta salvata solo su questo telefono. La crei su platform.openai.com.</span>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label class="label" for="imgModel">Modello immagini</label>
+        <input type="text" id="imgModel" autocomplete="off" spellcheck="false" placeholder="gpt-image-2">
+      </div>
+      <div class="field">
+        <span class="label">Qualità</span>
+        <div class="seg" id="imgQuality">
+          <button type="button" data-v="medium" aria-pressed="true">Media</button>
+          <button type="button" data-v="high" aria-pressed="false">Alta</button>
+        </div>
+      </div>
+    </div>
+    <span class="hint">Media costa circa 5–6 centesimi a foto, Alta circa 20. Le foto dei dettagli (etichette, difetti) non vengono mai modificate con l'AI.</span>
     <button class="btn primary" id="saveSettings" type="button">Salva impostazioni</button>
     <div class="status" id="settingsStatus" role="status"></div>
   </section>
@@ -259,6 +294,10 @@
 <script src="errors.js"></script>
 <script src="enhance.js"></script>
 <script src="ai-images.js"></script>
+<script src="presets.js"></script>
+<script src="quality.js"></script>
+<script src="guided-camera.js"></script>
+<script src="guided.js"></script>
 <script src="viewer.js"></script>
 <script src="studio.js"></script>
 <script src="app.js"></script>

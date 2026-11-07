@@ -7,7 +7,11 @@ ListLab (prima "Annuncio Pronto") è un'app Android (Capacitor 7) che sistema le
   - `index.html`, `style.css`, `app.js` — interfaccia e logica. Il nome dell'app è SOLO nella costante `APP_NAME` di `app.js` (gli elementi con `data-app-name` lo ricevono da lì; anche la cartella nella Galleria).
   - `viewer.js` — visualizzatore a schermo intero (`createViewer(api)`): zoom con due dita e doppio tocco, scorrimento tra le foto, Originale/Sistemata, Ruota, Elimina, chiusura con ✕, Esc, trascinamento in basso o tasto indietro (via `history.pushState`).
   - `studio.js` — scheda AI (`createStudio(api)`): striscia di foto selezionabili, Sistemazione automatica, Ritaglio intelligente (Claude), Raddrizza (±10°).
-  - `ai-images.js` — modifica con OpenAI (sfondo da studio, neutro, manichino invisibile, istruzione libera): per ora `AVAILABLE = false` e `editImage()` vuota, da completare (istruzioni in cima al file).
+  - `ai-images.js` — modifica foto con OpenAI (`/v1/images/edits`, modello `gpt-image-2` con ripiego su `gpt-image-1.5`/`gpt-image-1`, multipart via CapacitorHttp). Ogni prompt termina con la regola obbligatoria `RULE` ("Keep the garment exactly as in the photo…"). Modalità: `coat-cover`, `flat-clean`, `studio-white`, `neutral`, `ghost-mannequin`, `custom`.
+  - `presets.js` — preset del Servizio guidato (`window.LL_PRESETS`): per categoria passi (copertina/fronte/retro), dettagli facoltativi, ordine finale, disegni SVG, sagome della fotocamera, misure e regole per l'annuncio. "Cappotto" attivo; giacca/scarpe/altro `soon: true`.
+  - `guided.js` — Servizio guidato (`createGuided(api)`): scelta categoria → scaletta → controlli dopo lo scatto → elaborazione in sottofondo (2 alla volta) → prima/dopo → lettura etichette (Claude) → ordine → annuncio (`writeListing` con regole del preset) → "Annuncio pronto". Stato in `localStorage` (`ll_guided_v1`), foto in IndexedDB (`listlab/blobs`, chiavi `<uid>:orig|prep|ai`); alla riapertura riprende da solo.
+  - `guided-camera.js` — fotocamera guidata: `@capacitor-community/camera-preview` (dietro la pagina, `html.camera-on` rende trasparente lo sfondo) con sagoma, bolla (accelerometro) e avviso luce (`captureSample`); ripiego su `@capacitor/camera`, poi selettore file.
+  - `quality.js` — controlli locali: luminosità, nitidezza (varianza del Laplaciano), inclinazione (istogramma delle direzioni dei bordi; serve anche a raddrizzare fronte e retro).
   - `enhance.js` — correzione foto (usata sia dalla pagina sia dal worker).
   - `worker.js` — Web Worker che applica `enhancePixels` senza bloccare lo schermo.
   - `errors.js` — riquadro errori in fondo allo schermo (caricato prima di `app.js`).
@@ -15,6 +19,8 @@ ListLab (prima "Annuncio Pronto") è un'app Android (Capacitor 7) che sistema le
   - `logo.svg` — logo (splash in pagina, intestazioni, Impostazioni).
 - Interfaccia: tre schede (AI · Home · Impostazioni) con barra fissa in basso; si parte su Home. Gesti sulla griglia: tocco breve → schermo intero; pressione lunga ferma → vibrazione (`@capacitor/haptics`) e schermo intero al rilascio; pressione lunga + trascinamento → riordino. Pulsante occhio per vedere l'originale.
 - Grafica: sfondo verde salvia chiaro `#E8F3EC`, schede bianche, verde scuro `#23584A` per azioni e scheda attiva; tema scuro verde molto scuro (`#0E1A14`). Barre di sistema Android colorate da `scripts/android-setup.mjs`.
+- Regole del Servizio guidato: i DETTAGLI (etichette, fodera, difetti, metro) non vanno MAI modificati con l'AI. Se la copertina è AI, la descrizione chiude con "Copertina con sfondo ritoccato, le altre foto mostrano il capo reale." Chiave OpenAI in Impostazioni (`ap_openai_key`), mai nel codice.
+- Dettagli in Home: anche Materiale e (per Capispalla) misure spalle, ascella-ascella, lunghezza, manica; i campi letti dall'etichetta hanno la classe `auto` e il chip «letto dall'etichetta».
 - `plugins/gallery-saver/` — plugin Capacitor locale (Java) `GallerySaver.saveImage({data, root, folder, fileName, time})`: salva in `Pictures/<root>/<cartella>` via MediaStore, con date crescenti. Collegato in `package.json` come `file:plugins/gallery-saver`.
 - `scripts/android-setup.mjs` — da eseguire dopo `npx cap sync android`: nome sotto l'icona (da `appName`), colori delle barre di sistema, splash di Android 12+ (sfondo bianco, `assets/android/splash_icon.png`).
 - Logo: beuta da laboratorio con la L e una scintilla (IA), chiara su verde scuro `#23584A` (proposta «I6», scelta dall'utente). Sorgente `assets/logo-mark.svg`; `npm run logo` (serve Playwright) rigenera `assets/icon.png`, `assets/icon-foreground.png`, `assets/icon-background.png`, `www/logo.svg` e `assets/android/splash_icon.png`.
@@ -43,6 +49,7 @@ Se la versione 7 di Capacitor non è più l'ultima, va bene restare sulla 7; agg
 - Fotocamera e galleria passano dal selettore file della WebView: non servono permessi extra.
 - «Salva nel telefono» usa il plugin `GallerySaver` (MediaStore, nessun permesso da Android 10; fino ad Android 9 chiede il permesso di scrittura) e salva in `Pictures/ListLab/<cartella>` (`root` = `APP_NAME`). Se il plugin manca, ripiega su `Filesystem` in Documenti/ListLab.
 - `@capacitor/haptics` aggiunge il permesso VIBRATE (nessuna richiesta all'utente).
+- Fotocamera guidata: `scripts/android-setup.mjs` aggiunge `android.permission.CAMERA` (e `uses-feature camera` non obbligatoria) al manifest; il permesso viene chiesto all'utente al primo uso. camera-preview resta alla 7.x (la 8 richiede Capacitor 8).
 - `Filesystem` scrive nella cache per «Condividi tutte» e «Scarica ZIP».
 - File sempre nell'ordine della griglia: `01-copertina.jpg`, `02.jpg`, … Cartella = titolo dell'annuncio, oppure «Annuncio AAAA-MM-GG HH.MM».
 

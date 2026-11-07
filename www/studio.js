@@ -62,6 +62,7 @@
       $("aiEmpty").hidden = !empty; strip.hidden = empty; $("aiSelTools").hidden = empty;
       $("aiSelCount").textContent = empty ? "" : sel.size ? `${sel.size} di ${list.length} selezionate` : `${list.length} foto`;
       ["aiAuto", "aiCrop", "aiTiltApply", "aiTiltReset"].forEach(id => { $(id).disabled = busy || !sel.size; });
+      if (window.AIImages && window.AIImages.AVAILABLE) $("aiEditGo").disabled = busy || !sel.size;
       previewTilt();
     }
 
@@ -103,9 +104,17 @@
       run("Tolgo il raddrizzamento", list => api.applyTilt(list, 0));
     });
 
-    // sezione OpenAI: si abilita da sola quando ai-images.js sarà completato
+    // sezione OpenAI: attiva quando ai-images.js è disponibile
     const ready = !!(window.AIImages && window.AIImages.AVAILABLE);
     document.querySelectorAll('#aiEditModes input, #aiEditPrompt, #aiEditGo').forEach(el => { el.disabled = !ready; });
+    const soon = document.querySelector(".soon");
+    if (ready && soon) { soon.classList.remove("soon"); soon.removeAttribute("aria-disabled"); const pill = soon.querySelector(".pill"); if (pill) pill.textContent = "OpenAI"; }
+    $("aiEditGo").addEventListener("click", () => {
+      const r = document.querySelector('input[name="aiEdit"]:checked');
+      const mode = r ? r.value : "studio-white", extra = $("aiEditPrompt").value;
+      if (mode === "custom" && !extra.trim()) { status("Scrivi l'istruzione libera nel riquadro qui sopra.", true); return; }
+      run("L'AI sta modificando le foto (può volerci un minuto)", list => api.applyAiEdit(list, mode, extra));
+    });
 
     return { sync };
   };

@@ -57,6 +57,10 @@ const store = {
 };
 let apiKey = store.get("ap_key", "");
 let model = store.get("ap_model", "claude-haiku-5-5");
+// OpenAI (foto con AI): chiave, modello e qualità, solo in localStorage sul telefono
+let openaiKey = store.get("ap_openai_key", "");
+let imgModel = store.get("ap_img_model", "gpt-image-2");
+let imgQuality = store.get("ap_img_quality", "medium");
 
 function segSet(id, v) { [...$(id).children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
 function seg(id, onPick) {
@@ -68,11 +72,15 @@ function seg(id, onPick) {
 function updateKeyNotice() { $("keyNotice").hidden = !!apiKey; }
 section("impostazioni", () => {
   $("apiKey").value = apiKey; segSet("model", model);
-  let pendingModel = model;
+  $("openaiKey").value = openaiKey; $("imgModel").value = imgModel; segSet("imgQuality", imgQuality);
+  let pendingModel = model, pendingQuality = imgQuality;
   seg("model", v => { pendingModel = v; });
+  seg("imgQuality", v => { pendingQuality = v; });
   $("saveSettings").onclick = () => {
     apiKey = $("apiKey").value.trim(); model = pendingModel;
     store.set("ap_key", apiKey); store.set("ap_model", model);
+    openaiKey = $("openaiKey").value.trim(); imgModel = $("imgModel").value.trim() || "gpt-image-2"; imgQuality = pendingQuality;
+    store.set("ap_openai_key", openaiKey); store.set("ap_img_model", imgModel); store.set("ap_img_quality", imgQuality);
     const st = $("settingsStatus");
     st.textContent = apiKey ? "Impostazioni salvate ✓" : "Salvate. Senza chiave preparo solo una bozza semplice.";
     st.classList.remove("flash"); void st.offsetWidth; st.classList.add("flash");
@@ -96,7 +104,10 @@ function showTab(name) {
   document.querySelectorAll(".tabbar [data-tab]").forEach(b => {
     if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
-  if (name === "settings") { $("apiKey").value = apiKey; segSet("model", model); $("settingsStatus").textContent = ""; }
+  if (name === "settings") {
+    $("apiKey").value = apiKey; segSet("model", model); $("settingsStatus").textContent = "";
+    $("openaiKey").value = openaiKey; $("imgModel").value = imgModel; segSet("imgQuality", imgQuality);
+  }
   if (name === "ai" && studio) studio.sync();
 }
 section("schede", () => {
@@ -108,13 +119,53 @@ section("schede", () => {
 
 section("dettagli", () => {
 const sizeHints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
-seg("cat", v => { S.cat = v; $("size").placeholder = sizeHints[v]; });
+seg("cat", v => setCategory(v));
 seg("tone", v => { S.tone = v; });
 seg("fmt", v => { S.fmt = v; $("grid").classList.toggle("square", v === "11"); rerenderAll(); });
 $("whiten").addEventListener("change", rerenderAll);
 });
 
 function setStatus(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+function setCategory(v) {
+  S.cat = v; segSet("cat", v);
+  const hints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
+  $("size").placeholder = hints[v] || "";
+  $("measuresField").hidden = v !== "Capispalla";
+}
+// ---------- dettagli: lettura e scrittura (anche dal servizio guidato) ----------
+const MEASURES = { shoulders: "mShoulders", pit: "mPit", length: "mLength", sleeve: "mSleeve" };
+const MEASURE_NAMES = { shoulders: "spalle", pit: "ascella-ascella", length: "lunghezza", sleeve: "manica" };
+function getDetails() {
+  const measures = {};
+  for (const [k, id] of Object.entries(MEASURES)) { const v = $(id).value.trim(); if (v) measures[k] = v; }
+  return { brand: $("brand").value.trim(), size: $("size").value.trim(), material: $("material").value.trim(),
+    cond: $("cond").value, notes: $("notes").value.trim(), measures,
+    _auto: ["brand", "size", "material"].filter(id => $(id).classList.contains("auto")) };
+}
+// i campi letti dall'etichetta si segnano «letti dall'etichetta» finché l'utente non li modifica
+function setDetails(d, autoKeys) {
+  d = d || {};
+  for (const id of ["brand", "size", "material", "notes"]) if (d[id] != null) $(id).value = d[id];
+  if (d.cond) $("cond").value = d.cond;
+  if (d.measures) for (const [k, id] of Object.entries(MEASURES)) $(id).value = d.measures[k] || "";
+  (autoKeys || []).forEach(id => markAuto(id, true));
+}
+function markAuto(id, on) {
+  const el = $(id); if (!el) return;
+  el.classList.toggle("auto", on);
+  const lab = document.querySelector(`label[for="${id}"]`);
+  let chip = lab && lab.querySelector(".autochip");
+  if (on && lab && !chip) { chip = document.createElement("span"); chip.className = "autochip"; chip.textContent = "letto dall'etichetta"; lab.append(chip); }
+  if (!on && chip) chip.remove();
+}
+section("campi", () => {
+  ["brand", "size", "material"].forEach(id => $(id).addEventListener("input", () => markAuto(id, false)));
+});
+function measuresText() {
+  const m = getDetails().measures;
+  return Object.entries(m).map(([k, v]) => `${MEASURE_NAMES[k]} ${v} cm`).join(", ");
+}
 
 // ---------- worker pool ----------
 const pool = [];
@@ -153,6 +204,14 @@ drop.addEventListener("drop", e => { e.preventDefault(); addFiles(e.dataTransfer
 fileInput.addEventListener("change", () => { const f = [...(fileInput.files || [])]; fileInput.value = ""; addFiles(f); });
 });
 
+function newItem(file, props) {
+  return Object.assign({ id: nextId++, file, rot: 0, tilt: 0, edits: new Set(), forceWhiten: false, box: null, boxRot: 0,
+    src: null, origSrc: null, noEnhance: false, lockCrop: false, step: null, ver: 0, out: null, outPromise: null }, props || {});
+}
+function startItem(it) {
+  S.items.push(it); makeTile(it);
+  return enqueue(() => prepare(it).then(() => { drawTile(it, rotated(it.src, it.rot)); return renderItem(it); })).catch(() => failTile(it));
+}
 function addFiles(list) {
   // Su Android il selettore spesso restituisce file senza tipo, o con tipo generico
   // "application/octet-stream", e senza estensione: li accettiamo e lasciamo decidere
@@ -164,9 +223,7 @@ function addFiles(list) {
   $("status").classList.remove("err");
   for (const f of files) {
     if (S.items.length >= MAX) { skipped++; continue; }
-    const it = { id: nextId++, file: f, rot: 0, tilt: 0, edits: new Set(), forceWhiten: false, box: null, boxRot: 0, src: null, ver: 0, out: null, outPromise: null };
-    S.items.push(it); makeTile(it);
-    enqueue(() => prepare(it).then(() => { drawTile(it, rotated(it.src, it.rot)); return renderItem(it); })).catch(() => failTile(it));
+    startItem(newItem(f));
   }
   refresh();
   if (skipped) setStatus(`Massimo ${MAX} foto: ${skipped} non aggiunte.`, true);
@@ -182,14 +239,20 @@ async function loadBitmap(file) {
   });
 }
 async function prepare(it) {
-  const bmp = await loadBitmap(it.file);
+  if (it.origFile && !it.origSrc) it.origSrc = await fileCanvas(it.origFile);
+  it.src = await fileCanvas(it.file);
+}
+async function fileCanvas(file) {
+  const bmp = await loadBitmap(file);
   const k = Math.min(1, (WORK_SIDE * 4 / 3) / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas");
   c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(bmp, 0, 0, c.width, c.height);
   if (bmp.close) bmp.close();
-  it.src = c;
+  return c;
 }
+// la foto "originale" (prima dell'AI) per occhio, visualizzatore e «Tieni l'originale»
+const origOf = it => it.origSrc || it.src;
 
 // ---------- ritaglio e correzione ----------
 function rotated(src, rot) {
@@ -269,7 +332,8 @@ async function renderItem(it) {
   x.drawImage(Src, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - rx) * k, (sy0 - ry) * k, (sx1 - sx0) * k, (sy1 - sy0) * k);
   if (!it.orig) drawTile(it, out); // il nuovo taglio si vede subito
 
-  const img = await enhanceAsync(x.getImageData(0, 0, OW, OH), $("whiten").checked || it.forceWhiten);
+  // le foto già rifatte dall'AI non passano dalla correzione locale
+  const img = it.noEnhance ? x.getImageData(0, 0, OW, OH) : await enhanceAsync(x.getImageData(0, 0, OW, OH), $("whiten").checked || it.forceWhiten);
   if (v !== it.ver || !S.items.includes(it)) return;
   x.putImageData(img, 0, 0);
   setProcessed(it, out);
@@ -312,14 +376,14 @@ function setProcessed(it, out) {
   paintTile(it);
 }
 function paintTile(it) {
-  if (it.orig && it.src) drawTile(it, rotated(it.src, it.rot));
+  if (it.orig && it.src) drawTile(it, rotated(origOf(it), it.rot));
   else if (it.proc) drawTile(it, it.proc);
   it.el.classList.toggle("orig", !!it.orig);
   if (it.eye) { it.eye.setAttribute("aria-pressed", String(!!it.orig)); it.eye.setAttribute("aria-label", it.orig ? "Mostra la foto sistemata" : "Mostra l'originale"); }
   if (!it.el.classList.contains("failed")) it.badge.textContent = it.orig ? "Originale" : label(it);
   paintEdits(it);
 }
-const EDIT_NAMES = { auto: "Auto", crop: "Ritaglio", straighten: "Dritta" };
+const EDIT_NAMES = { auto: "Auto", crop: "Ritaglio", straighten: "Dritta", ai: "AI" };
 function editLabel(it) {
   if (!it.edits || !it.edits.size) return "";
   const names = [...it.edits].map(e => EDIT_NAMES[e] || e);
@@ -346,7 +410,7 @@ function makeTile(it) {
   r.onclick = e => {
     e.stopPropagation(); it.rot = (it.rot + 90) % 360;
     r.classList.remove("spin"); void r.offsetWidth; r.classList.add("spin");
-    if (it.orig && it.src) drawTile(it, rotated(it.src, it.rot));
+    if (it.orig && it.src) drawTile(it, rotated(origOf(it), it.rot));
     rotateItem(it);
   };
   // occhio: tocca per vedere l'originale, ritocca per tornare alla foto sistemata
@@ -625,10 +689,13 @@ function browserDownload(blobs) { blobs.forEach((b, i) => downloadBlob(b, fname(
 // ---------- testo con Claude ----------
 function buildPrompt(n) {
   const brand = $("brand").value.trim(), size = $("size").value.trim(), notes = $("notes").value.trim();
+  const material = $("material").value.trim(), mis = S.cat === "Capispalla" ? measuresText() : "";
   return `Sei un venditore esperto su Vinted Italia. Ti mostro ${n} foto dello STESSO articolo usato da vendere.
 Categoria: ${S.cat}
 Marca indicata dal venditore: ${brand || "non indicata"}
 Taglia: ${size || "non indicata"}
+Materiale: ${material || "non indicato"}
+Misure: ${mis || "non indicate"}
 Condizioni: ${$("cond").value}
 Note del venditore: ${notes || "nessuna"}
 Tono: ${S.tone === "amichevole" ? "amichevole e caldo, come una persona reale, senza esagerare" : "essenziale e ordinato, frasi brevi"}
@@ -641,6 +708,7 @@ Regole:
 - controlli: cose da verificare prima di pubblicare (possibili macchie o segni visti in foto, marca non leggibile). Lista vuota se nulla.
 - box: per OGNI foto, nell'ordine, il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
 
+${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}
 Rispondi SOLO con JSON:
 {"titolo":"...","descrizione":"...","hashtag":["#..."],"controlli":["..."],"box":[[0.1,0.05,0.9,0.95]]}`;
 }
@@ -662,8 +730,9 @@ Rispondi SOLO con JSON: {"box":[[0.1,0.05,0.9,0.95]]}`;
   if (!r || !Array.isArray(r.box)) throw new Error("json");
   return r.box;
 }
-async function callClaude(items, prompt, maxTokens) {
-  const content = items.map(it => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: aiImage(it) } }));
+async function callClaude(items, prompt, maxTokens) { return callClaudeB64(items.map(aiImage), prompt, maxTokens); }
+async function callClaudeB64(images, prompt, maxTokens) {
+  const content = images.map(data => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }));
   content.push({ type: "text", text: prompt });
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -694,7 +763,8 @@ function errMsg(e, offline) {
 
 function fallbackText() {
   const brand = $("brand").value.trim(), size = $("size").value.trim(), notes = $("notes").value.trim();
-  const tipo = { Scarpe: "Scarpe", Abbigliamento: "Capo", Capispalla: "Giacca" }[S.cat];
+  const material = $("material").value.trim(), mis = S.cat === "Capispalla" ? measuresText() : "";
+  const tipo = S.guidedTipo || { Scarpe: "Scarpe", Abbigliamento: "Capo", Capispalla: "Giacca" }[S.cat];
   const cond = $("cond").value;
   return {
     titolo: [tipo, brand, size && ("taglia " + size)].filter(Boolean).join(" "),
@@ -702,7 +772,10 @@ function fallbackText() {
       `${tipo}${brand ? " " + brand : ""} in ${cond.toLowerCase()}.`,
       ...(notes ? [notes] : []),
       ...(size ? [`Taglia: ${size}`] : []),
+      ...(material ? [`Materiale: ${material}`] : []),
+      ...(mis ? [`Misure: ${mis}`] : []),
       `Condizioni: ${cond.toLowerCase()}`,
+      ...(S.guidedNote ? ["", S.guidedNote] : []),
       "",
       "Spedisco con cura. Per qualsiasi domanda scrivimi pure!"
     ].join("\n"),
@@ -727,7 +800,7 @@ on("go", async () => {
     try { ai = await askClaude(ready); } catch (e) { note = errMsg(e); }
   }
   if (ai && Array.isArray(ai.box)) {
-    ai.box.forEach((b, i) => { const it = ready[i]; if (it && S.items.includes(it) && validBox(b)) { it.box = b; it.boxRot = it.rot; enqueue(() => renderItem(it)); } });
+    ai.box.forEach((b, i) => { const it = ready[i]; if (it && !it.lockCrop && S.items.includes(it) && validBox(b)) { it.box = b; it.boxRot = it.rot; enqueue(() => renderItem(it)); } });
   }
   const text = ai && ai.titolo && ai.descrizione ? ai : fallbackText();
   S.text = text;
@@ -886,7 +959,8 @@ on("reset", () => {
   S.items.forEach(it => { it.ver++; it.el.remove(); });
   $("grid").classList.remove("sorting");
   S.items = []; S.text = null; S.histId = null;
-  ["brand", "size", "notes"].forEach(id => { $(id).value = ""; });
+  ["brand", "size", "notes", "material", ...Object.values(MEASURES)].forEach(id => { $(id).value = ""; });
+  ["brand", "size", "material"].forEach(id => markAuto(id, false));
   $("cond").value = "Ottime condizioni";
   $("resText").hidden = true; $("out").innerHTML = "";
   $("go").textContent = "Scrivi l'annuncio";
@@ -894,6 +968,37 @@ on("reset", () => {
   refresh();
   window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 });
+
+// ---------- foto modificate con l'AI (OpenAI, ai-images.js) ----------
+const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("blob")), type || "image/jpeg", q || 0.92));
+const imgSize = () => S.fmt === "11" ? "1024x1024" : "1024x1536";
+// sostituisce la foto con la versione AI; l'originale resta per «Originale» e «Tieni l'originale»
+async function useAiImage(it, blob) {
+  if (!it.origSrc) it.origSrc = it.tilt ? oriented(it) : rotated(it.src, it.rot);
+  it.src = await fileCanvas(blob);
+  it.rot = 0; it.tilt = 0; it.box = [0, 0, 1, 1]; it.boxRot = 0;   // l'AI ha già inquadrato: niente tagli
+  it.noEnhance = true; it.lockCrop = true; it.edits.add("ai");
+  await enqueue(() => renderItem(it));
+}
+async function keepOriginal(it) {
+  if (!it.origSrc) return;
+  it.src = it.origSrc; it.origSrc = null;
+  it.noEnhance = false; it.lockCrop = false; it.box = null; it.edits.delete("ai");
+  await enqueue(() => renderItem(it));
+}
+async function aiEditItem(it, mode, extra) {
+  if (!openaiKey) throw new Error("Per la modifica con AI serve la chiave OpenAI: aggiungila in Impostazioni.");
+  const input = await toBlob(it.origSrc || oriented(it), "image/jpeg", 0.92);
+  setWorking(it, true);
+  try {
+    const out = await window.AIImages.editImage({ image: input, mode, prompt: extra, apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize() });
+    await useAiImage(it, out);
+    return out;
+  } catch (e) {
+    setWorking(it, false);
+    throw new Error(window.AIImages.errorText(e));
+  }
+}
 
 // ---------- visualizzatore a schermo intero (viewer.js) ----------
 const viewable = () => S.items.filter(i => i.src && !i.el.classList.contains("failed"));
@@ -911,7 +1016,7 @@ function placeholder(it, orig) {
   const key = orig ? `o${it.rot}` : `f${it.ver}`;
   const c = phCache.get(it) || {};
   if (c[orig ? "o" : "f"] && c[orig ? "o" : "f"].key === key) return c[orig ? "o" : "f"].url;
-  const src = orig ? (it.src && rotated(it.src, it.rot)) : (it.proc || it.cv);
+  const src = orig ? (it.src && rotated(origOf(it), it.rot)) : (it.proc || it.cv);
   if (!src) return null;
   const k = Math.min(1, 480 / Math.max(src.width, src.height));
   const cv = document.createElement("canvas"); cv.width = Math.round(src.width * k); cv.height = Math.round(src.height * k);
@@ -925,7 +1030,7 @@ async function fullUrl(it, orig) {
     if (!it.src) return null;
     const key = `o${it.rot}`, have = (urlCache.get(it) || {}).o;
     if (have && have.key === key) return have.url;
-    const blob = await new Promise(r => rotated(it.src, it.rot).toBlob(r, "image/jpeg", 0.92));
+    const blob = await new Promise(r => rotated(origOf(it), it.rot).toBlob(r, "image/jpeg", 0.92));
     return blob ? cachedUrl(it, key, () => URL.createObjectURL(blob)) : null;
   }
   const v = it.ver, blob = it.out || (it.outPromise && await it.outPromise);
@@ -977,6 +1082,16 @@ section("studio", () => {
       await rerender(list);
       return found ? `Ritaglio fatto su ${found} ${found === 1 ? "foto" : "foto"}. Le trovi in Home.` : "Claude non ha trovato un ritaglio migliore: le foto restano com'erano.";
     },
+    async applyAiEdit(list, mode, extra) {
+      if (!openaiKey) throw new Error("Per la modifica con AI serve la chiave OpenAI: aggiungila nella scheda Impostazioni.");
+      let ok = 0, err = "";
+      for (const it of list) {
+        try { await aiEditItem(it, mode, extra); ok++; } catch (e) { err = e.message; }
+      }
+      if (!ok) throw new Error(err || "Modifica con AI non riuscita.");
+      return `Modifica AI fatta su ${ok} ${ok === 1 ? "foto" : "foto"}${err ? " (alcune non riuscite: " + err + ")" : ""}. Le trovi in Home con il badge ✦ AI.`;
+    },
+    async keepOriginal(list) { for (const it of list) await keepOriginal(it); return "Ripristinate le foto originali."; },
     async applyTilt(list, deg) {
       list.forEach(it => { it.tilt = deg; if (deg) it.edits.add("straighten"); else it.edits.delete("straighten"); });
       await rerender(list);
@@ -986,6 +1101,72 @@ section("studio", () => {
   studio.sync();
 });
 
+// ---------- servizio guidato (guided.js) ----------
+let guided = null;
+async function replaceGrid(entries) {
+  S.items.forEach(it => { it.ver++; it.el.remove(); });
+  S.items = []; S.text = null; S.histId = null;
+  $("resText").hidden = true; $("out").innerHTML = "";
+  $("status").classList.remove("err");
+  const jobs = entries.slice(0, MAX).map((e, i) => {
+    const file = new File([e.blob], `${String(i + 1).padStart(2, "0")}-${e.name || "foto.jpg"}`, { type: e.blob.type || "image/jpeg" });
+    const it = newItem(file, {
+      step: e.step, lockCrop: true,                   // ordine e ritaglio decisi dal servizio guidato
+      noEnhance: !!e.ai, box: e.ai ? [0, 0, 1, 1] : (e.box || null),
+      origFile: e.origBlob ? new File([e.origBlob], "originale.jpg", { type: e.origBlob.type || "image/jpeg" }) : null
+    });
+    if (e.ai) it.edits.add("ai");
+    if (e.straightened) it.edits.add("straighten");
+    return startItem(it);
+  });
+  refresh();
+  await Promise.all(jobs);
+  await Promise.all(S.items.map(i => i.outPromise).filter(Boolean));
+}
+async function writeListing(rules, honestNote) {
+  S.guidedRules = rules; S.guidedNote = honestNote || ""; S.guidedTipo = "Cappotto";
+  try { await $("go").onclick(); }
+  finally { S.guidedRules = null; S.guidedNote = ""; S.guidedTipo = null; }
+  const st = $("status");
+  return { note: st.classList.contains("err") ? st.textContent : "" };
+}
+async function copyPlain(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (_) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
+    ta.remove(); return ok;
+  }
+}
+section("servizio guidato", () => {
+  guided = window.createGuided({
+    plugin, haptic,
+    keys: () => ({ claude: !!apiKey, openai: !!openaiKey }),
+    claude: (images, prompt, max) => callClaudeB64(images, prompt, max),
+    async aiEdit(blob, mode) {
+      try { return await window.AIImages.editImage({ image: blob, mode, apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize() }); }
+      catch (e) { throw new Error(window.AIImages.errorText(e)); }
+    },
+    replaceGrid,
+    getDetails, setDetails,
+    setCategory,
+    writeListing: (rules) => writeListing(rules, /Copertina con sfondo ritoccato/.test(rules) ? "Copertina con sfondo ritoccato, le altre foto mostrano il capo reale." : ""),
+    textNow: () => S.text,
+    copyText: () => S.text ? copyPlain(fullText(S.text)) : Promise.resolve(false),
+    async saveAll() { await $("saveAll").onclick(); return $("status").textContent; },
+    async shareAll() { await $("shareAll").onclick(); return $("status").textContent; },
+    gridCount: () => S.items.length,
+    showTab,
+    onClose: () => updateGuidedButton()
+  });
+  $("guidedStart").onclick = () => { if (guided.hasSaved()) guided.resume(); else guided.open(); };
+  updateGuidedButton();
+});
+function updateGuidedButton() {
+  const l = $("guidedStartLabel"); if (!l || !guided) return;
+  l.textContent = guided.hasSaved() ? "Riprendi l'annuncio guidato" : "Nuovo annuncio guidato";
+}
+
 // ---------- caricamento iniziale ----------
 // La splash nativa (bianca, col logo) si chiude appena la pagina è pronta; la splash
 // in pagina continua con la stessa grafica e un'animazione, poi si dissolve.
@@ -993,8 +1174,12 @@ section("splash", () => {
   const SplashScreen = plugin("SplashScreen");
   if (SplashScreen) { try { Promise.resolve(SplashScreen.hide({ fadeOutDuration: 120 })).catch(() => {}); } catch (_) {} }
   const el = $("splash");
-  if (!el) return;
+  if (!el) { if (guided) guided.init(); return; }
   const wait = Math.max(0, 750 - performance.now());
-  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 320); }, wait);
+  setTimeout(() => {
+    el.classList.add("out"); setTimeout(() => el.remove(), 320);
+    // se l'app era stata chiusa a metà di un servizio guidato, riprende da lì
+    try { if (guided) guided.init(); } catch (e) { console.error(e); }
+  }, wait);
 });
 })();

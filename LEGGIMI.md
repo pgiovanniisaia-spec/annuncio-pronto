@@ -25,6 +25,30 @@ Le foto si sistemano anche senza internet. Per scrivere le descrizioni serve una
 
 Costo indicativo: con "Veloce", meno di un centesimo per annuncio. Con "Più accurato", qualche centesimo.
 
+## Servizio guidato: un cappotto in pochi tocchi
+1. In Home tocca **Nuovo annuncio guidato** e scegli **Cappotto**.
+2. Segui la scaletta. Per ogni passo puoi usare **Scatta** o **Scegli dalla galleria**:
+   - **Copertina**: cappotto su una gruccia, appeso a una porta o a un gancio, contro un muro chiaro, con la luce di una finestra di lato. Tieni il telefono dritto, all'altezza del petto, a 1,5–2 m.
+   - **Fronte** e **Retro**: cappotto steso sul letto o sul pavimento, foto dall'alto con il telefono parallelo al piano.
+   - Nella fotocamera fai combaciare il cappotto con la **sagoma tratteggiata** e aspetta che la **bolla diventi verde**. Se compare «Luce scarsa», avvicinati alla finestra.
+   - Se una foto è mossa, scura, storta o il cappotto è tagliato, l'app chiede «Rifai lo scatto?».
+3. Con **+ Aggiungi dettaglio** fotografa le etichette (marca, taglia e composizione) ed eventualmente fodera, bottoni, difetti e la foto con il metro. Se vuoi, scrivi le misure.
+4. Tocca **Elabora e crea l'annuncio**. Il lavoro sulle foto principali è già partito in sottofondo:
+   - la copertina diventa una foto da studio;
+   - fronte e retro vengono raddrizzati, ritagliati e ripuliti dal disordine;
+   - i dettagli restano foto vere.
+5. Per ogni foto modificata con l'AI confronti **prima/dopo** e scegli **Usa questa**, **Rifai** o **Tieni l'originale**.
+6. Marca, taglia e materiale vengono letti dalle etichette. Le foto vengono messe in ordine e titolo, descrizione e hashtag si scrivono da soli.
+7. Nella schermata **Annuncio pronto** tocca **Copia testo**, **Salva foto in ordine** (vanno nella Galleria, in una cartella con il titolo) oppure **Condividi**.
+
+Se chiudi l'app a metà, alla riapertura riprende da dove eri rimasto.
+
+Servono due chiavi, da inserire in **Impostazioni**: quella di **Anthropic** (testo, etichette, controllo dell'inquadratura) e quella di **OpenAI** (copertina e pulizia dello sfondo). Senza la chiave OpenAI puoi usare «Solo sistemazione locale», che è gratuita.
+
+Costo indicativo di un servizio completo con qualità «Media»:
+- OpenAI: circa 5–6 centesimi per foto modificata, quindi 15–20 centesimi per copertina, fronte e retro;
+- Claude Veloce: meno di 1 centesimo in tutto.
+
 ## Come si usa
 La barra in basso ha tre schede: **AI**, **Home** e **Impostazioni**. L'app si apre su Home.
 
