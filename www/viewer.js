@@ -45,6 +45,7 @@
       const it = list[idx];
       $("vCount").textContent = `${idx + 1} / ${list.length}` + (idx === 0 ? " · Copertina" : "");
       stage.classList.toggle("busy", !!(it && api.isWorking(it)));
+      $("vReport").hidden = !(it && api.hasReport && api.hasReport(it));
       resetZoom(false); setOffset(0, false);
       const del = $("vDelete"); del.dataset.sure = ""; del.lastChild.textContent = " Elimina";
     }
@@ -307,6 +308,7 @@
       vmsg("Preparo la foto originale…");
       try { vmsg(await api.chatgpt(it)); } catch (e) { vmsg("Non riuscito: " + (e.message || e)); }
     });
+    $("vReport").addEventListener("click", () => { const it = cur(); if (it && api.report) api.report(it); });
     $("vImport").addEventListener("click", async () => {
       const it = cur(); if (!it || !api.importResult) return;
       try { const t = await api.importResult(it); if (t) { vmsg(t); render(); } } catch (e) { vmsg("Importazione non riuscita: " + (e.message || e)); }

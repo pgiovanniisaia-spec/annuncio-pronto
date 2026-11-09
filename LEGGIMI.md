@@ -45,14 +45,22 @@ Se chiudi l'app a metà, alla riapertura riprende da dove eri rimasto.
 
 Servono due chiavi, da inserire in **Impostazioni**: quella di **Anthropic** (testo, etichette, controllo dell'inquadratura) e quella di **OpenAI** (copertina e pulizia dello sfondo). Senza la chiave OpenAI puoi usare «Solo sistemazione locale», che è gratuita.
 
-Costo indicativo (il costo stimato compare sempre prima di ogni invio):
-- copertina in qualità **Alta**: circa 0,22 $ (0,24 $ con la foto di riferimento stile, circa 0,44 $ con 2 varianti);
-- fronte e retro con AI: circa 0,22 $ ciascuno in Alta (oppure gratis con «Senza AI» / «Solo sistemazione locale»);
-- Claude Veloce: meno di 1 centesimo in tutto.
+## Copertina con AI: Regista + Fotografo
+Nella scheda **AI** tocca **Crea copertina**.
+1. 🎬 Il **regista** (Claude) studia il capo e la tua foto modello e prepara le istruzioni.
+2. Ti mostra la **Sintesi del lavoro**: cosa ha visto, cosa farà il fotografo, cosa controllerà e il costo stimato.
+   - **Procedi**: parte lo scatto (è l'unico pulsante che spende su OpenAI).
+   - **Correggi**: scrivi cosa cambiare (es. «gruccia di legno», «più spazio sopra») e il regista aggiorna la sintesi, senza costi OpenAI.
+   - **Annulla**: non succede nulla.
+3. 📷 Il **fotografo** (OpenAI) fa **uno** scatto dalla foto originale.
+4. 🎬 Il regista controlla il risultato voce per voce (✓/✗). Scegli **Usa questa**, **Riprova con correzione** (nuova conferma, sempre una sola foto) o **Tieni l'originale**.
+5. Alla fine vedi il riepilogo con il costo reale, diviso tra Claude e OpenAI.
 
-**Foto di riferimento stile**: scegli una tua foto riuscita (es. un cappotto appeso a un muro bianco con luce naturale). L'AI ne copia scena, luce e inquadratura per tutte le copertine, ma non il capo.
+In **Impostazioni** trovi lo **Stile copertina** (carica una o più foto modello e scegli la predefinita), il modello del regista e «Chiedi conferma prima di ogni copertina».
 
-**Gratis con ChatGPT**: nel visualizzatore tocca «Modifica con l'app ChatGPT». La foto originale va a ChatGPT e il prompt viene copiato: incollalo, salva il risultato e torna su ListLab con «Importa risultato».
+Costo indicativo per copertina: circa **0,25 $** (regista circa 0,04 $ per brief e controllo, fotografo circa 0,21 $ per uno scatto in qualità Alta). Ogni «Riprova» aggiunge circa 0,23 $.
+
+**Gratis con ChatGPT**: nel visualizzatore tocca «Modifica con l'app ChatGPT». La foto originale va a ChatGPT e il prompt preparato dal regista viene copiato: incollalo, salva il risultato e torna su ListLab con «Importa risultato».
 
 ## Come si usa
 La barra in basso ha tre schede: **AI**, **Home** e **Impostazioni**. L'app si apre su Home.

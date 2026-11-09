@@ -62,7 +62,7 @@
       $("aiEmpty").hidden = !empty; strip.hidden = empty; $("aiSelTools").hidden = empty;
       $("aiSelCount").textContent = empty ? "" : sel.size ? `${sel.size} di ${list.length} selezionate` : `${list.length} foto`;
       ["aiAuto", "aiCrop", "aiTiltApply", "aiTiltReset"].forEach(id => { $(id).disabled = busy || !sel.size; });
-      if (window.AIImages && window.AIImages.AVAILABLE) $("aiEditGo").disabled = busy || !sel.size;
+      $("aiCover").disabled = busy || empty;
       previewTilt();
     }
 
@@ -104,34 +104,23 @@
       run("Tolgo il raddrizzamento", list => api.applyTilt(list, 0));
     });
 
-    // sezione OpenAI: attiva quando ai-images.js è disponibile
-    const ready = !!(window.AIImages && window.AIImages.AVAILABLE);
-    document.querySelectorAll('#aiEditModes input, #aiEditPrompt, #aiEditGo').forEach(el => { el.disabled = !ready; });
-    const soon = document.querySelector(".soon");
-    if (ready && soon) { soon.classList.remove("soon"); soon.removeAttribute("aria-disabled"); const pill = soon.querySelector(".pill"); if (pill) pill.textContent = "OpenAI"; }
-    $("aiEditGo").addEventListener("click", () => {
-      const r = document.querySelector('input[name="aiEdit"]:checked');
-      const mode = r ? r.value : "studio-white", extra = $("aiEditPrompt").value;
-      if (mode === "custom" && !extra.trim()) { status("Scrivi l'istruzione libera nel riquadro qui sopra.", true); return; }
-      const useRef = $("aiUseRef").checked && hasRef, n = $("aiVariants").checked ? 2 : 1;
-      run("L'AI sta modificando le foto (può volerci un minuto)", list => api.applyAiEdit(list, mode, extra, { useRef, n }));
-    });
-    // foto di riferimento stile (salvata sul telefono, riusata per tutte le copertine)
+    // copertina con AI: Regista (Claude) + Fotografo (OpenAI). Nessuna opzione preimpostata:
+    // decide il regista partendo dal capo e dalla foto modello.
     let hasRef = false;
     if (window.LLStyleRef) {
       window.LLStyleRef.mount($("aiRefBox"));
-      const onRef = b => { hasRef = !!b; $("aiUseRef").closest("label").hidden = !b; updateCost(); };
+      const onRef = b => { hasRef = !!b; $("aiUseRef").closest("label").hidden = !b; };
       window.LLStyleRef.get().then(onRef); window.LLStyleRef.onChange(onRef);
     }
-    $("aiVariants").checked = !!(api.variants && api.variants());
-    $("aiVariants").addEventListener("change", () => { if (api.setVariants) api.setVariants($("aiVariants").checked); updateCost(); });
-    $("aiUseRef").addEventListener("change", updateCost);
-    function updateCost() {
-      if (!api.costText) return;
-      $("aiCost").textContent = api.costText($("aiVariants").checked ? 2 : 1, $("aiUseRef").checked && hasRef);
-    }
-    updateCost();
+    $("aiCover").addEventListener("click", async () => {
+      const list = api.items(), it = selected()[0] || list[0];
+      if (!it) { status("Aggiungi prima una foto in Home.", true); return; }
+      busy = true; sync(); status("Il regista è al lavoro…");
+      try { status(await api.createCover(it, $("aiUseRef").checked && hasRef)); }
+      catch (e) { status(e && e.message ? e.message : "Operazione non riuscita.", true); }
+      finally { busy = false; sync(); }
+    });
 
-    return { sync, updateCost: () => updateCost() };
+    return { sync, updateCost: () => {} };
   };
 })();

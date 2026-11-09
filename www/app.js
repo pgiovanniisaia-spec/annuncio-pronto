@@ -59,14 +59,21 @@ let apiKey = store.get("ap_key", "");
 let model = store.get("ap_model", "claude-haiku-5-5");
 // OpenAI (foto con AI): chiave, modello e qualità, solo in localStorage sul telefono
 let openaiKey = store.get("ap_openai_key", "");
-let imgModel = store.get("ap_img_model", "gpt-image-2.5-sunburst");
+let imgModel = store.get("ap_img_model", "gpt-image-2.6-sunburst");
 let imgQuality = store.get("ap_img_quality", "high");
-let imgVariants = store.get("ap_img_variants", "1") === "2";
+// Regista (Claude): modello e conferma prima di ogni copertina
+let directorModel = store.get("ap_director_model", "claude-sonnet-5-5");
+let confirmCover = store.get("ap_confirm_cover", "1") === "1";
 // aggiornamento: qualità Alta e modello più recente come predefiniti (una volta sola)
 if (store.get("ap_img_v2", "") !== "1") {
   if (imgQuality === "medium") imgQuality = "high";
   if (imgModel === "gpt-image-2" || imgModel === "gpt-image-1") imgModel = "gpt-image-2.5-sunburst";
   store.set("ap_img_quality", imgQuality); store.set("ap_img_model", imgModel); store.set("ap_img_v2", "1");
+}
+// novembre 2026: GPT-Image-2.6 Sunburst sostituisce 2.5 come modello per le modifiche precise
+if (store.get("ap_img_v3", "") !== "1") {
+  if (/^gpt-image-2(\.5-sunburst)?$/.test(imgModel)) { imgModel = "gpt-image-2.6-sunburst"; store.set("ap_img_model", imgModel); }
+  store.set("ap_img_v3", "1");
 }
 
 function segSet(id, v) { [...$(id).children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v))); }
@@ -80,14 +87,20 @@ function updateKeyNotice() { $("keyNotice").hidden = !!apiKey; }
 section("impostazioni", () => {
   $("apiKey").value = apiKey; segSet("model", model);
   $("openaiKey").value = openaiKey; $("imgModel").value = imgModel; segSet("imgQuality", imgQuality);
-  let pendingModel = model, pendingQuality = imgQuality;
+  segSet("directorModel", directorModel); $("confirmCover").checked = confirmCover;
+  let pendingModel = model, pendingQuality = imgQuality, pendingDirector = directorModel;
   seg("model", v => { pendingModel = v; });
   seg("imgQuality", v => { pendingQuality = v; });
+  seg("directorModel", v => { pendingDirector = v; });
+  // la conferma prima di ogni copertina si applica subito
+  $("confirmCover").addEventListener("change", () => { confirmCover = $("confirmCover").checked; store.set("ap_confirm_cover", confirmCover ? "1" : "0"); });
+  if (window.LLStyleRef) window.LLStyleRef.manage($("styleManager"));
   $("saveSettings").onclick = () => {
     apiKey = $("apiKey").value.trim(); model = pendingModel;
     store.set("ap_key", apiKey); store.set("ap_model", model);
-    openaiKey = $("openaiKey").value.trim(); imgModel = $("imgModel").value.trim() || "gpt-image-2.5-sunburst"; imgQuality = pendingQuality;
+    openaiKey = $("openaiKey").value.trim(); imgModel = $("imgModel").value.trim() || "gpt-image-2.6-sunburst"; imgQuality = pendingQuality;
     store.set("ap_openai_key", openaiKey); store.set("ap_img_model", imgModel); store.set("ap_img_quality", imgQuality);
+    directorModel = pendingDirector; store.set("ap_director_model", directorModel);
     const st = $("settingsStatus");
     st.textContent = apiKey ? "Impostazioni salvate ✓" : "Salvate. Senza chiave preparo solo una bozza semplice.";
     st.classList.remove("flash"); void st.offsetWidth; st.classList.add("flash");
@@ -746,7 +759,7 @@ Regole:
 - controlli: cose da verificare prima di pubblicare (possibili macchie o segni visti in foto, marca non leggibile). Lista vuota se nulla.
 - box: per OGNI foto, nell'ordine, il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
 
-${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}
+${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}
 Rispondi SOLO con JSON:
 {"titolo":"...","descrizione":"...","hashtag":["#..."],"controlli":["..."],"box":[[0.1,0.05,0.9,0.95]]}`;
 }
@@ -996,7 +1009,7 @@ on("reset", () => {
   b.dataset.sure = ""; b.textContent = "+ Nuovo annuncio"; b.hidden = true;
   S.items.forEach(it => { it.ver++; it.el.remove(); });
   $("grid").classList.remove("sorting");
-  S.items = []; S.text = null; S.histId = null;
+  S.items = []; S.text = null; S.histId = null; S.directorAnalysis = null;
   ["brand", "size", "notes", "material", ...Object.values(MEASURES)].forEach(id => { $(id).value = ""; });
   ["brand", "size", "material"].forEach(id => markAuto(id, false));
   $("cond").value = "Ottime condizioni";
@@ -1029,45 +1042,78 @@ function originalBlob(it) {
   const rot = it.rawRot != null ? it.rawRot : it.rot;
   return window.AIImages.fullQuality(it.rawFile || it.file, rot);
 }
-const costOf = (n, images) => window.AIImages.formatCost(window.AIImages.estimateCost({ quality: imgQuality, n, images }));
-const QUALITY_NAMES = { low: "Bozza (anteprima)", medium: "Media", high: "Alta" };
-// chiede conferma mostrando il costo stimato della singola operazione
-async function confirmAi(what, n, images, count) {
-  const each = window.AIImages.estimateCost({ quality: imgQuality, n, images });
-  const r = await window.LLAsk({
-    title: "Inviare a OpenAI?",
-    body: `${what}: ${count > 1 ? count + " foto, " : ""}${n > 1 ? n + " varianti, " : ""}qualità ${QUALITY_NAMES[imgQuality] || imgQuality}${images > 1 ? ", con foto di riferimento stile" : ""}.`,
-    cost: window.AIImages.formatCost(each * (count || 1)), ok: "Invia", cancel: "Annulla"
+// ---------- copertina con AI: REGISTA (Claude) + FOTOGRAFO (OpenAI) ----------
+// L'app non scrive prompt: orchestra i due ruoli (director.js / director-ui.js) e passa i dati.
+// creati dentro section(): un errore qui non deve mai fermare il resto dell'app
+let director = null, flow = null;
+section("regista", () => {
+  director = window.createDirector({
+    claudeKey: () => apiKey, directorModel: () => directorModel,
+    openaiKey: () => openaiKey, imgModel: () => imgModel, imgQuality: () => imgQuality, imgSize
   });
-  return r.ok;
+  flow = window.createDirectorFlow({ director, confirm: () => confirmCover, toast: msg => appToast(msg) });
+});
+let flowChain = Promise.resolve();
+function appToast(msg) {
+  let t = document.getElementById("gToast");
+  if (!t) { t = document.createElement("div"); t.id = "gToast"; t.setAttribute("role", "status"); document.body.append(t); }
+  t.textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 4500);
 }
-async function aiEditItem(it, mode, extra, opts) {
-  opts = opts || {};
-  if (!openaiKey) throw new Error("Per la modifica con AI serve la chiave OpenAI: aggiungila in Impostazioni.");
-  const input = await originalBlob(it);
-  setWorking(it, true);
-  try {
-    const outs = await window.AIImages.editImage({ image: input, reference: opts.reference || null, mode, prompt: extra,
-      apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize(), n: opts.n || 1 });
-    const chosen = outs.length > 1 ? await window.LLPick(outs, "Scegli la variante migliore") : outs[0];
-    if (!chosen) { setWorking(it, false); return null; }
-    await useAiImage(it, chosen);
-    return chosen;
-  } catch (e) {
-    setWorking(it, false);
-    throw new Error(window.AIImages.errorText(e));
-  }
+const LAVORI = { cover: "copertina: capo appeso alla gruccia contro un muro", front: "fronte in piano: capo steso su superficie chiara, foto dall'alto", back: "retro in piano: capo steso girato su superficie chiara, foto dall'alto" };
+function knownInfo() { const d = getDetails(); return { categoria: S.cat, marca: d.brand, taglia: d.size, materiale: d.material }; }
+// l'analisi del regista compila i campi vuoti e alimenta la descrizione
+function applyAnalysis(an) {
+  if (!an) return;
+  S.directorAnalysis = an;
+  if (!$("material").value.trim() && an.materiale) $("material").value = an.materiale;
+}
+// un lavoro del regista alla volta (anche dal servizio guidato)
+function directorRun(job) {
+  const p = flowChain.then(async () => {
+    if (!flow) throw new Error("Il regista non è disponibile su questo telefono.");
+    if (!apiKey) throw new Error("Per il regista serve la chiave Claude: aggiungila in Impostazioni.");
+    if (!openaiKey) throw new Error("Per il fotografo serve la chiave OpenAI: aggiungila in Impostazioni.");
+    const reference = job.useRef ? await window.LLStyleRef.get() : null;
+    const r = await flow.run({ original: job.original, reference, lavoro: LAVORI[job.kind || "cover"], info: knownInfo(), title: job.title });
+    if (r && r.brief) applyAnalysis(r.brief.analisi);
+    return r;
+  });
+  flowChain = p.catch(() => {});
+  return p;
+}
+const record = r => ({ brief: r.brief, report: r.report, prompt: r.prompt, shots: r.shots, costs: r.costs });
+const costLine = c => `Claude ${(c.claude || 0).toLocaleString("it-IT", { maximumFractionDigits: 3 })} $ + OpenAI ${(c.openai || 0).toLocaleString("it-IT", { maximumFractionDigits: 3 })} $`;
+function moveToFront(it) {
+  const i = S.items.indexOf(it); if (i <= 0) return;
+  S.items.splice(i, 1); S.items.unshift(it);
+  S.items.forEach(x => $("grid").append(x.el));
+  refresh();
+}
+async function createCover(it, useRef) {
+  const r = await directorRun({ original: await originalBlob(it), kind: "cover", title: "Copertina con AI", useRef });
+  if (!r || !r.choice) return r && r.costs && r.costs.claude ? `Annullato: nessuno scatto (regista ${costLine(r.costs)}).` : "Annullato: nessuno scatto, nessun costo OpenAI.";
+  if (r.choice === "orig") return `Tenuta la foto originale. Costo: ${costLine(r.costs)}.`;
+  await useAiImage(it, r.blob);
+  it.director = record(r);
+  moveToFront(it);
+  return `Copertina pronta in Home (badge ✦ AI), ${r.shots.length} ${r.shots.length === 1 ? "scatto" : "scatti"}. Costo reale: ${costLine(r.costs)}.`;
 }
 
 // ---------- alternativa gratuita: app ChatGPT ----------
-function chatgptPrompt() {
-  const coat = S.cat === "Capispalla";
-  return window.AIImages.buildPrompt(coat ? "coat-cover" : "wall-hanging", "", false);
+// il prompt lo scrive il regista (se la foto ha già un brief si riusa quello)
+async function chatgptPrompt(it) {
+  if (it.director && it.director.prompt) return it.director.prompt;
+  if (!apiKey) throw new Error("Per preparare il prompt serve la chiave Claude (il regista).");
+  const r = await director.brief({ original: await originalBlob(it), reference: null, lavoro: LAVORI.cover, info: knownInfo() });
+  applyAnalysis(r.brief.analisi);
+  it.chatgptPrompt = r.brief.prompt_fotografo;
+  return r.brief.prompt_fotografo;
 }
 async function shareToChatGPT(it) {
-  const blob = await originalBlob(it), prompt = chatgptPrompt();
+  const prompt = it.chatgptPrompt || await chatgptPrompt(it), blob = await originalBlob(it);
   const copied = await copyPlain(prompt);
-  const note = copied ? "Prompt copiato: incollalo in ChatGPT insieme alla foto, poi salva il risultato e usa «Importa risultato»." : "Apri ChatGPT, allega la foto e scrivi il prompt.";
+  const note = copied ? "Prompt del regista copiato: incollalo in ChatGPT insieme alla foto, poi salva il risultato e usa «Importa risultato»." : "Apri ChatGPT, allega la foto e incolla il prompt.";
   try {
     if (native && Filesystem && Share) {
       const r = await Filesystem.writeFile({ path: "chatgpt/foto-originale.jpg", data: await blobToB64(blob), directory: "CACHE", recursive: true });
@@ -1136,7 +1182,9 @@ section("visualizzatore", () => {
     rotate: it => rotateItem(it),
     remove: it => removeItem(it),
     chatgpt: it => shareToChatGPT(it),
-    importResult: it => importResult(it)
+    importResult: it => importResult(it),
+    hasReport: it => !!it.director,
+    report: it => flow.showReport(it.director, async () => { await keepOriginal(it); it.director = null; if (viewer) viewer.refreshItem(it); })
   });
 });
 
@@ -1169,23 +1217,7 @@ section("studio", () => {
       await rerender(list);
       return found ? `Ritaglio fatto su ${found} ${found === 1 ? "foto" : "foto"}. Le trovi in Home.` : "Claude non ha trovato un ritaglio migliore: le foto restano com'erano.";
     },
-    async applyAiEdit(list, mode, extra, opts) {
-      opts = opts || {};
-      if (!openaiKey) throw new Error("Per la modifica con AI serve la chiave OpenAI: aggiungila nella scheda Impostazioni.");
-      const reference = opts.useRef ? await window.LLStyleRef.get() : null;
-      const n = opts.n || 1;
-      if (!await confirmAi("Modifica con AI", n, reference ? 2 : 1, list.length)) return "Operazione annullata: nessun costo.";
-      let ok = 0, err = "";
-      for (const it of list) {
-        try { if (await aiEditItem(it, mode, extra, { reference, n })) ok++; } catch (e) { err = e.message; }
-      }
-      if (!ok && err) throw new Error(err);
-      if (!ok) return "Nessuna variante scelta: foto lasciate com'erano.";
-      return `Modifica AI fatta su ${ok} ${ok === 1 ? "foto" : "foto"}${err ? " (alcune non riuscite: " + err + ")" : ""}. Le trovi in Home con il badge ✦ AI.`;
-    },
-    costText: (n, useRef) => costOf(n, useRef ? 2 : 1) + " a foto · qualità " + (QUALITY_NAMES[imgQuality] || imgQuality),
-    variants: () => imgVariants,
-    setVariants: v => { imgVariants = !!v; store.set("ap_img_variants", v ? "2" : "1"); },
+    createCover: (it, useRef) => createCover(it, useRef),
     async keepOriginal(list) { for (const it of list) await keepOriginal(it); return "Ripristinate le foto originali."; },
     async applyTilt(list, deg) {
       list.forEach(it => { it.tilt = deg; if (deg) it.edits.add("straighten"); else it.edits.delete("straighten"); });
@@ -1212,6 +1244,7 @@ async function replaceGrid(entries) {
       origFile: e.origBlob ? new File([e.origBlob], "originale.jpg", { type: e.origBlob.type || "image/jpeg" }) : null
     });
     if (e.ai) it.edits.add("ai");
+    if (e.director) it.director = e.director;
     if (e.straightened) it.edits.add("straighten");
     return startItem(it);
   });
@@ -1239,20 +1272,12 @@ section("servizio guidato", () => {
     plugin, haptic,
     keys: () => ({ claude: !!apiKey, openai: !!openaiKey }),
     claude: (images, prompt, max) => callClaudeB64(images, prompt, max),
-    // blob = foto originale; opts { reference, n }; restituisce un array di Blob (1 o 2 varianti)
-    async aiEdit(blob, mode, opts) {
-      opts = opts || {};
-      try { return await window.AIImages.editImage({ image: await window.AIImages.fullQuality(blob, 0), reference: opts.reference || null, mode, apiKey: openaiKey, model: imgModel, quality: imgQuality, size: imgSize(), n: opts.n || 1 }); }
-      catch (e) { throw new Error(window.AIImages.errorText(e)); }
+    // regista + fotografo per copertina, fronte e retro: { choice, blob, record }
+    async directorRun(o) {
+      const r = await directorRun({ original: await window.AIImages.fullQuality(o.raw, 0), kind: o.kind, title: o.title, useRef: o.useRef });
+      return { choice: r && r.choice, blob: r && r.blob, record: r && r.choice === "ai" ? record(r) : null, costs: r && r.costs };
     },
-    confirmAi: (what, n, images) => window.LLAsk({
-      title: "Inviare a OpenAI?", body: `${what}${n > 1 ? ", " + n + " varianti" : ""}, qualità ${QUALITY_NAMES[imgQuality] || imgQuality}${images > 1 ? ", con foto di riferimento stile" : ""}.`,
-      cost: costOf(n, images), ok: "Invia", cancel: "Senza AI", remember: "Non chiedere più per questo annuncio"
-    }),
-    costText: (n, images) => costOf(n, images),
     styleRef: () => window.LLStyleRef.get(),
-    variants: () => imgVariants,
-    setVariants: v => { imgVariants = !!v; store.set("ap_img_variants", v ? "2" : "1"); },
     replaceGrid,
     getDetails, setDetails,
     setCategory,
