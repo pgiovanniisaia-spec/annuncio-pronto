@@ -11,6 +11,14 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const money = d => "≈ " + (d || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $";
   const money3 = d => (d || 0).toLocaleString("it-IT", { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + " $";
+  // messaggio per l'utente: mai il testo tecnico in inglese (quello va in "Dettagli tecnici")
+  function userMessage(e, phase) {
+    const noShot = phase === "shoot" ? "" : " Non ti è stato addebitato nessuno scatto.";
+    if (e && e.code === "badresponse") return (phase === "shoot" ? "Il fotografo" : "Il regista") + " non ha risposto correttamente. Tocca Riprova:" + noShot.replace(" Non", " non");
+    if (e && ["nokey", "http", "offline", "refusal"].includes(e.code)) return e.message + (phase === "shoot" ? "" : noShot);
+    if (phase === "shoot") return (e && e.message) || "Lo scatto non è riuscito.";
+    return "Il regista non ha risposto correttamente. Tocca Riprova:" + noShot.replace(" Non", " non");
+  }
   const STEPS = [["brief", "🎬", "Regista", "Analizzo il capo…"], ["synth", "📝", "Sintesi", "Decidi tu"], ["shoot", "📷", "Fotografo", "Scatto…"], ["check", "🎬", "Regista", "Controllo…"], ["result", "✅", "Esito", ""]];
 
   window.createDirectorFlow = function createDirectorFlow(opts) {
@@ -63,7 +71,8 @@
           timeline();
           const B = $d("dBody"), F = $d("dFoot");
           if (st.error) {
-            B.innerHTML = `<div class="d-err"><strong>Qualcosa non è andato</strong><p>${esc(st.error)}</p></div>`;
+            B.innerHTML = `<div class="d-err"><strong>Qualcosa non è andato</strong><p>${esc(st.error)}</p></div>
+              ${st.errorRaw ? `<details class="d-tech"><summary>Dettagli tecnici</summary><pre>${esc(st.errorRaw)}</pre></details>` : ""}`;
             F.innerHTML = `<button type="button" class="btn" data-d="close">Chiudi</button><button type="button" class="btn primary" data-d="again">Riprova</button>`;
             return;
           }
@@ -140,6 +149,13 @@
         }
 
         // ---------- passi ----------
+        function fail(e, phase, again) {
+          if (e && e.cost && phase !== "shoot") st.costs.claude += e.cost;   // anche i tentativi falliti costano (poco)
+          st.error = userMessage(e, phase);
+          st.errorRaw = (e && (e.raw || (e.code ? "" : String(e.stack || e.message || e)))) || "";
+          st.failed = () => { st.errorRaw = ""; again(); };
+          render();
+        }
         async function doBrief(correction) {
           st.stage = "brief"; st.error = ""; render();
           try {
@@ -150,7 +166,7 @@
               if (opts.toast) opts.toast("Sintesi: " + (st.brief.sintesi[0] || st.brief.visto || "scatto in corso"));
               setTimeout(() => { if (st.stage === "synth" && !root.hidden) doShoot(st.prompt); }, 1200);
             }
-          } catch (e) { st.error = e.message || "Errore del regista."; st.failed = () => doBrief(correction); render(); }
+          } catch (e) { fail(e, "brief", () => doBrief(correction)); }
         }
         async function doShoot(prompt) {
           st.stage = "shoot"; st.error = ""; st.prompt = prompt; render();
@@ -158,7 +174,7 @@
             const r = await D.shoot({ original: job.original, reference: job.reference, prompt });
             st.costs.openai += r.cost; st.costs.est = st.costs.est || !!r.estimated;
             st.result = r.blob; resultUrl = url(r.blob);
-          } catch (e) { st.error = e.message; st.failed = () => doShoot(prompt); render(); return; }
+          } catch (e) { fail(e, "shoot", () => doShoot(prompt)); return; }
           await doCheck();
         }
         async function doCheck() {
@@ -168,7 +184,7 @@
             st.costs.claude += r.cost; st.report = r.report;
             st.shots.push({ prompt: st.prompt, approvata: r.report.approvata, voto: r.report.voto });
             st.stage = "result"; render();      // nessuno scatto automatico, anche se bocciata
-          } catch (e) { st.error = e.message; st.failed = () => doCheck(); render(); }
+          } catch (e) { fail(e, "check", () => doCheck()); }
         }
 
         root.onclick = e => {

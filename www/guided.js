@@ -325,12 +325,16 @@
     }
     async function checkFraming(s, c, st) {
       try {
-        const r = await api.claude([toB64(c, 1024)], `Questa è la foto "${st.title}" di un ${preset().tipo.toLowerCase()} da vendere su Vinted.
-Rispondi SOLO con JSON: {"capo":true,"box":[x0,y0,x1,y1],"tagliato":false,"dove":""}
-- capo: c'è il ${preset().tipo.toLowerCase()} nella foto?
-- box: riquadro che contiene l'INTERO capo (gruccia esclusa), valori da 0 a 1, 0,0 in alto a sinistra.
-- tagliato: true se una parte del capo (maniche, orlo, colletto, spalle) esce dall'inquadratura.
-- dove: se tagliato, dove (es. "in basso", "manica destra"), altrimenti "".`, 200);
+        const T = api.S(), tipo = preset().tipo.toLowerCase();
+        const r = await api.claude([toB64(c, 1024)], `Questa è la foto "${st.title}" di un ${tipo} da vendere su Vinted. Controlla l'inquadratura.`, 1000, {
+          name: "consegna_inquadratura", description: "Consegna il controllo dell'inquadratura.",
+          input_schema: T.obj({
+            capo: T.bool(`c'è il ${tipo} nella foto?`),
+            box: T.arr(T.num(""), "riquadro che contiene l'INTERO capo (gruccia esclusa): [x0,y0,x1,y1] da 0 a 1, 0,0 in alto a sinistra"),
+            tagliato: T.bool("true se una parte del capo (maniche, orlo, colletto, spalle) esce dall'inquadratura"),
+            dove: T.str("se tagliato, dove (es. in basso, manica destra); altrimenti stringa vuota")
+          })
+        }, x => typeof x.tagliato === "boolean" ? "" : 'il campo "tagliato" manca');
         const box = Array.isArray(r.box) && r.box.length === 4 ? r.box.map(Number) : null;
         const touches = box && (box[0] < 0.005 || box[1] < 0.005 || box[2] > 0.995 || box[3] > 0.995) && st.id !== "cover";
         return { cut: !!r.tagliato || (r.capo === false) || !!touches, where: r.capo === false ? "non vedo il capo" : (r.dove || (touches ? "tocca il bordo" : "")), box };
@@ -425,13 +429,16 @@ Rispondi SOLO con JSON: {"capo":true,"box":[x0,y0,x1,y1],"tagliato":false,"dove"
       G.labelsState = "working"; G.labelsAgain = false; render();
       try {
         const imgs = []; for (const s of ls) { const c = await origCanvas(s); if (c) imgs.push(toB64(c, 1400)); }
-        const r = await api.claude(imgs, `Sono foto delle etichette di un ${preset().tipo.toLowerCase()} (marca, taglia, composizione).
-Leggi SOLO ciò che è scritto davvero, senza inventare. Rispondi SOLO con JSON:
-{"marca":"","taglia_letta":"","taglia":"","composizione":"","materiale":""}
-- taglia: nel formato italiano, es. "TG. 52" → "IT 52", "Taglia 46" → "IT 46"; taglie a lettere restano così (es. "M").
-- composizione: percentuali dei tessuti esterni, es. "80% lana, 20% cashmere".
-- materiale: forma breve per il titolo, es. "lana e cashmere".
-Usa "" per ciò che non è leggibile.`, 300);
+        const T = api.S();
+        const r = await api.claude(imgs, `Sono foto delle etichette di un ${preset().tipo.toLowerCase()} (marca, taglia, composizione). Leggi SOLO ciò che è scritto davvero, senza inventare; usa una stringa vuota per ciò che non è leggibile.`, 1500, {
+          name: "consegna_etichette", description: "Consegna i dati letti dalle etichette.",
+          input_schema: T.obj({
+            marca: T.str("marca"), taglia_letta: T.str("taglia come scritta, es. TG. 52"),
+            taglia: T.str("taglia in formato italiano: TG. 52 → IT 52, Taglia 46 → IT 46; le taglie a lettere restano così (es. M)"),
+            composizione: T.str("percentuali dei tessuti esterni, es. 80% lana, 20% cashmere"),
+            materiale: T.str("forma breve per il titolo, es. lana e cashmere")
+          })
+        });
         G.labels = { marca: (r.marca || "").trim(), taglia: (r.taglia || r.taglia_letta || "").trim(), composizione: (r.composizione || "").trim(), materiale: (r.materiale || "").trim() };
         const d = {}, auto = [];
         if (G.labels.marca) { d.brand = G.labels.marca; auto.push("brand"); }

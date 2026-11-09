@@ -759,9 +759,7 @@ Regole:
 - controlli: cose da verificare prima di pubblicare (possibili macchie o segni visti in foto, marca non leggibile). Lista vuota se nulla.
 - box: per OGNI foto, nell'ordine, il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
 
-${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}
-Rispondi SOLO con JSON:
-{"titolo":"...","descrizione":"...","hashtag":["#..."],"controlli":["..."],"box":[[0.1,0.05,0.9,0.95]]}`;
+${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}`;
 }
 
 function aiImage(it) {
@@ -772,35 +770,31 @@ function aiImage(it) {
   return c.toDataURL("image/jpeg", 0.85).split(",")[1];
 }
 
-async function askClaude(items) { return callClaude(items, buildPrompt(items.length), 1500); }
+// Tutte le chiamate a Claude passano da claude-call.js: tool use con schema rigoroso (niente JSON.parse
+// di testo libero), ripetizione automatica se manca un campo o la risposta è troncata, parser tollerante.
+const T = window.LLClaude ? window.LLClaude.S : null;
+const BOX = () => T.arr(T.arr(T.num(""), "[x0,y0,x1,y1] da 0 a 1, 0,0 in alto a sinistra"), "per OGNI foto, nell'ordine, il riquadro che contiene l'intero articolo; [0,0,1,1] se lo riempie già");
+const LISTING_TOOL = () => ({
+  name: "consegna_annuncio", description: "Consegna l'annuncio Vinted: titolo, descrizione, hashtag, controlli e riquadri.",
+  input_schema: T.obj({
+    titolo: T.str("massimo 60 caratteri"), descrizione: T.str("4-8 righe"), hashtag: T.arr(T.str(""), "da 4 a 6, minuscoli, con #"),
+    controlli: T.arr(T.str(""), "cose da verificare prima di pubblicare; vuota se nulla"), box: BOX()
+  })
+});
+const BOXES_TOOL = () => ({ name: "consegna_riquadri", description: "Consegna i riquadri dell'articolo in ogni foto.", input_schema: T.obj({ box: BOX() }) });
+async function askClaude(items) {
+  return callClaude(items, buildPrompt(items.length), 4000, LISTING_TOOL(), x => window.LLClaude.need(x, ["titolo", "descrizione"]));
+}
 async function askBoxes(items) {
   const prompt = `Ti mostro ${items.length} foto dello stesso articolo da vendere su Vinted (categoria: ${S.cat}).
-Per OGNI foto, nell'ordine, indica il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
-Rispondi SOLO con JSON: {"box":[[0.1,0.05,0.9,0.95]]}`;
-  const r = await callClaude(items, prompt, 400);
-  if (!r || !Array.isArray(r.box)) throw new Error("json");
+Per OGNI foto, nell'ordine, indica il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile).`;
+  const r = await callClaude(items, prompt, 2000, BOXES_TOOL(), x => Array.isArray(x.box) && x.box.length ? "" : 'il campo "box" è vuoto');
   return r.box;
 }
-async function callClaude(items, prompt, maxTokens) { return callClaudeB64(items.map(aiImage), prompt, maxTokens); }
-async function callClaudeB64(images, prompt, maxTokens) {
-  const content = images.map(data => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }));
-  content.push({ type: "text", text: prompt });
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
-    body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "user", content }] })
-  });
-  if (!res.ok) { const e = new Error("http"); e.status = res.status; throw e; }
-  const data = await res.json();
-  const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-  const a = text.indexOf("{"), b = text.lastIndexOf("}");
-  if (a < 0 || b < a) throw new Error("json");
-  return JSON.parse(text.slice(a, b + 1));
+async function callClaude(items, prompt, maxTokens, tool, validate) { return callClaudeB64(items.map(aiImage), prompt, maxTokens, tool, validate); }
+async function callClaudeB64(images, prompt, maxTokens, tool, validate) {
+  const r = await window.LLClaude.callTool({ key: apiKey, model, images, prompt, tool, maxTokens: Math.max(maxTokens || 0, 2000), validate });
+  return r.input;
 }
 
 function errMsg(e, offline) {
@@ -808,7 +802,8 @@ function errMsg(e, offline) {
   if (e.status === 429) return "Troppe richieste ravvicinate: riprova tra un minuto.";
   if (e.status === 400) return "Richiesta rifiutata. Controlla credito e modello su console.anthropic.com.";
   if (e.status === 529 || e.status >= 500) return "Il servizio è occupato: riprova tra poco.";
-  if (e.message === "json") return "Risposta non leggibile: premi di nuovo «Scrivi l'annuncio».";
+  if (e.code === "badresponse") return "Claude non ha risposto correttamente: tocca di nuovo il pulsante per riprovare.";
+  if (e.code === "refusal" || e.code === "nokey") return e.message;
   return offline || "Nessuna connessione. Ho preparato una bozza semplice.";
 }
 
@@ -1271,7 +1266,8 @@ section("servizio guidato", () => {
   guided = window.createGuided({
     plugin, haptic,
     keys: () => ({ claude: !!apiKey, openai: !!openaiKey }),
-    claude: (images, prompt, max) => callClaudeB64(images, prompt, max),
+    claude: (images, prompt, max, tool, validate) => callClaudeB64(images, prompt, max, tool, validate),
+    S: () => window.LLClaude.S,
     // regista + fotografo per copertina, fronte e retro: { choice, blob, record }
     async directorRun(o) {
       const r = await directorRun({ original: await window.AIImages.fullQuality(o.raw, 0), kind: o.kind, title: o.title, useRef: o.useRef });

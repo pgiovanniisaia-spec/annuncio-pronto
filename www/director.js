@@ -23,35 +23,16 @@
     if (bmp.close) bmp.close();
     return c.toDataURL("image/jpeg", 0.88).split(",")[1];
   }
-  function parseJson(text) {
-    const a = text.indexOf("{"), b = text.lastIndexOf("}");
-    if (a < 0 || b < a) { const e = new Error("Il regista ha risposto in un formato non leggibile."); e.code = "json"; throw e; }
-    return JSON.parse(text.slice(a, b + 1));
-  }
 
   window.createDirector = function createDirector(cfg) {
     const P = window.LLDirectorPrompt, AI = window.AIImages;
 
-    async function claude(images, prompt, maxTokens) {
-      const key = cfg.claudeKey(), model = cfg.directorModel();
-      if (!key) { const e = new Error("Per il regista serve la chiave Claude: aggiungila in Impostazioni."); e.code = "nokey"; throw e; }
-      const content = images.map(data => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }));
-      content.push({ type: "text", text: prompt });
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model, max_tokens: maxTokens, system: P.SYSTEM, messages: [{ role: "user", content }] })
-      });
-      if (!res.ok) {
-        let msg = ""; try { msg = ((await res.json()).error || {}).message || ""; } catch (_) {}
-        const e = new Error(res.status === 401 ? "Chiave Claude non valida: controllala in Impostazioni." : res.status === 429 ? "Claude: troppe richieste, riprova tra poco." : "Regista non raggiungibile" + (msg ? ": " + msg : ` (errore ${res.status})`));
-        e.status = res.status; throw e;
-      }
-      const data = await res.json();
-      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-      const u = data.usage || {}, pr = priceOf(model);
-      const cost = (u.input_tokens || 0) * pr.in + (u.output_tokens || 0) * pr.out;
-      return { json: parseJson(text), cost, usage: u, model };
+    // ogni chiamata al regista passa da claude-call.js: tool use con schema rigoroso, 4000 token,
+    // ripetizioni automatiche e parser tollerante come ultima rete (nessun JSON.parse di testo libero)
+    async function claude(images, prompt, tool, validate) {
+      const r = await window.LLClaude.callTool({ key: cfg.claudeKey(), model: cfg.directorModel(), system: P.SYSTEM,
+        images, prompt, tool, maxTokens: 4000, validate, what: "Il regista" });
+      return { json: r.input, cost: r.cost };
     }
 
     // ---- brief (anche dopo una correzione dell'utente) ----
@@ -59,9 +40,8 @@
       const imgs = [await toJpeg1024(o.original)];
       if (o.reference) imgs.push(await toJpeg1024(o.reference));
       const text = P.briefRequest({ lavoro: o.lavoro, hasRef: !!o.reference, info: o.info || {}, previous: o.previous || null, correction: o.correction || "" });
-      const r = await claude(imgs, text, 2500);
+      const r = await claude(imgs, text, P.BRIEF_TOOL, x => window.LLClaude.need(x, ["visto", "sintesi", "prompt_fotografo", "checklist"]));
       const b = r.json;
-      if (!b || typeof b.prompt_fotografo !== "string" || !b.prompt_fotografo.trim()) { const e = new Error("Il regista non ha scritto il prompt per il fotografo."); e.code = "json"; throw e; }
       b.sintesi = Array.isArray(b.sintesi) ? b.sintesi : [];
       b.checklist = Array.isArray(b.checklist) ? b.checklist : [];
       b.analisi = b.analisi || {};
@@ -77,7 +57,8 @@
     // ---- controllo del regista ----
     async function check(o) {
       const imgs = [await toJpeg1024(o.original), await toJpeg1024(o.result)];
-      const r = await claude(imgs, P.checkRequest({ lavoro: o.lavoro, prompt: o.prompt, checklist: o.brief.checklist, analisi: o.brief.analisi }), 2500);
+      const r = await claude(imgs, P.checkRequest({ lavoro: o.lavoro, prompt: o.prompt, checklist: o.brief.checklist, analisi: o.brief.analisi }), P.CHECK_TOOL,
+        x => (typeof x.approvata !== "boolean" ? 'il campo "approvata" manca' : !Array.isArray(x.controlli) || !x.controlli.length ? 'il campo "controlli" è vuoto' : (!x.approvata && !(x.prompt_corretto || "").trim()) ? 'manca "prompt_corretto"' : ""));
       const c = r.json || {};
       c.controlli = Array.isArray(c.controlli) ? c.controlli : [];
       c.problemi = Array.isArray(c.problemi) ? c.problemi : [];

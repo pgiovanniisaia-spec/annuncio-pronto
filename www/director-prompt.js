@@ -28,22 +28,41 @@ FOTO IN PIANO (fronte o retro)
 CONTROLLO
 - Nel controllo sii severo: confronta elemento per elemento con l'originale e con la checklist. Boccia se un dettaglio è cambiato, se la gruccia è sbagliata o se la foto sembra un ritaglio incollato.
 
-LINGUA E FORMATO
+LINGUA E CONSEGNA
 - "visto", "sintesi", "problemi" e le voci della checklist: italiano, brevi e concreti.
 - "prompt_fotografo" e "prompt_corretto": inglese, completi.
-- Rispondi SOLO con JSON valido, senza testo prima o dopo.`;
+- Consegna SEMPRE il risultato chiamando lo strumento indicato nella richiesta (consegna_brief o consegna_controllo), compilando tutti i campi.`;
 
-  const BRIEF_FORMAT = `Rispondi SOLO con questo JSON:
-{
-  "analisi": { "tipo": "", "colore": "", "materiale": "", "lunghezza": "", "colletto": "", "cappuccio": "", "chiusura": "", "num_bottoni": 0, "tasche": "", "cintura": "", "dettagli": [], "difetti": [] },
-  "visto": "il capo in 1-2 righe in italiano",
-  "sintesi": ["4-6 punti brevi in italiano su cosa farà il fotografo"],
-  "prompt_fotografo": "prompt completo in inglese",
-  "checklist": ["voci brevi in italiano da controllare sul risultato"]
-}`;
-
-  const CHECK_FORMAT = `Rispondi SOLO con questo JSON:
-{ "approvata": true, "voto": 1, "controlli": [{ "voce": "", "ok": true }], "problemi": ["in italiano"], "prompt_corretto": "prompt completo in inglese con i problemi corretti (vuoto se approvata)" }`;
+  // ---- strumenti con schema rigoroso (strict): la risposta arriva già come oggetto, mai come testo da interpretare ----
+  const T = window.LLClaude.S;
+  const BRIEF_TOOL = {
+    name: "consegna_brief",
+    description: "Consegna il brief del regista: analisi del capo, sintesi per l'utente, prompt completo per il fotografo e checklist di controllo.",
+    input_schema: T.obj({
+      analisi: T.obj({
+        tipo: T.str("tipo di capo, es. piumino lungo"), colore: T.str("colore preciso"), materiale: T.str("materiale visibile o indicato"),
+        lunghezza: T.str("lunghezza"), colletto: T.str("colletto o revers"), cappuccio: T.str("cappuccio: no / sì e com'è"),
+        chiusura: T.str("chiusura: bottoni, zip…"), num_bottoni: T.int("numero di bottoni frontali, 0 se nessuno"),
+        tasche: T.str("tasche: numero e tipo"), cintura: T.str("cintura: no / sì e com'è"),
+        dettagli: T.arr(T.str(""), "altri dettagli da conservare"), difetti: T.arr(T.str(""), "difetti visibili")
+      }, "analisi del capo"),
+      visto: T.str("il capo in 1-2 righe in italiano"),
+      sintesi: T.arr(T.str(""), "4-6 punti brevi in italiano su cosa farà il fotografo"),
+      prompt_fotografo: T.str("prompt completo in inglese per il fotografo"),
+      checklist: T.arr(T.str(""), "voci brevi in italiano da controllare sul risultato")
+    })
+  };
+  const CHECK_TOOL = {
+    name: "consegna_controllo",
+    description: "Consegna il controllo del regista sul risultato del fotografo.",
+    input_schema: T.obj({
+      approvata: T.bool("true se il risultato è approvato"),
+      voto: T.int("voto da 1 a 10"),
+      controlli: T.arr(T.obj({ voce: T.str("voce della checklist"), ok: T.bool("true se rispettata") }), "esito di ogni voce"),
+      problemi: T.arr(T.str(""), "problemi in italiano (vuoto se nessuno)"),
+      prompt_corretto: T.str("prompt completo in inglese con i problemi corretti; stringa vuota se approvata")
+    })
+  };
 
   // testo della richiesta per il brief (e per la correzione chiesta dall'utente)
   function briefRequest(o) {
@@ -57,7 +76,6 @@ LINGUA E FORMATO
       lines.push("", `CORREZIONE DELL'UTENTE (in italiano, va applicata): ${o.correction}`);
       lines.push("Aggiorna analisi, sintesi, prompt_fotografo e checklist tenendo conto della correzione.");
     }
-    lines.push("", BRIEF_FORMAT);
     return lines.join("\n");
   }
   function checkRequest(o) {
@@ -66,10 +84,9 @@ LINGUA E FORMATO
       `Prompt usato dal fotografo: ${o.prompt}`,
       `Checklist da verificare: ${JSON.stringify(o.checklist || [])}`,
       `Analisi del capo: ${JSON.stringify(o.analisi || {})}`,
-      "Controlla ogni voce e ogni dettaglio del capo. Se non approvi, scrivi in prompt_corretto il prompt completo corretto.",
-      "", CHECK_FORMAT
+      "Controlla ogni voce e ogni dettaglio del capo. Se non approvi, scrivi in prompt_corretto il prompt completo corretto."
     ].join("\n");
   }
 
-  window.LLDirectorPrompt = { SYSTEM, briefRequest, checkRequest };
+  window.LLDirectorPrompt = { SYSTEM, BRIEF_TOOL, CHECK_TOOL, briefRequest, checkRequest };
 })();
