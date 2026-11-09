@@ -54,9 +54,9 @@ Nella scheda **AI** tocca **Crea copertina**.
    - **Annulla**: non succede nulla.
 3. 📷 Il **fotografo** (OpenAI) fa **uno** scatto dalla foto originale.
 4. 🎬 Il regista controlla il risultato voce per voce (✓/✗). Scegli **Usa questa**, **Riprova con correzione** (nuova conferma, sempre una sola foto) o **Tieni l'originale**.
+5. Alla fine vedi il riepilogo con il costo reale, diviso tra Claude e OpenAI.
 
 Se il regista risponde in modo incompleto, ListLab ripete da solo la richiesta (una volta). Se non funziona ancora, vedi «Il regista non ha risposto correttamente. Tocca Riprova»: non viene addebitato nessuno scatto OpenAI.
-5. Alla fine vedi il riepilogo con il costo reale, diviso tra Claude e OpenAI.
 
 In **Impostazioni** trovi lo **Stile copertina** (carica una o più foto modello e scegli la predefinita), il modello del regista e «Chiedi conferma prima di ogni copertina».
 
