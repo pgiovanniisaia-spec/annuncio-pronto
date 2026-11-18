@@ -18,17 +18,20 @@
   <header class="apphead">
     <img class="applogo" src="logo.svg" alt="" width="40" height="40">
     <div>
-      <div class="label"><span data-app-name></span> · studio</div>
-      <h1>Studio AI</h1>
+      <div class="label"><span data-app-name></span> · foto</div>
+      <h1>Foto</h1>
     </div>
     <button class="gear" type="button" data-goto="settings" aria-label="Impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
-  <p class="lead">Scegli le foto e applica una sistemazione. I risultati tornano nella griglia di Home, nello stesso ordine.</p>
+  <p class="lead">Le foto dell'articolo: scatti guidati con regista e fotografo, poi ritocchi sulle foto caricate.</p>
 
-  <section class="panel" id="stepsPanel">
-    <div class="step"><h2>Scaletta foto</h2></div>
-    <span class="hint">Il cappotto parte con questi scatti. Spegni quelli che non ti servono: vale dal prossimo annuncio guidato.</span>
-    <div id="stepsList"></div>
+  <section class="panel" id="shotPlan">
+    <div class="step"><h2 id="shotPlanTitle">Scaletta foto</h2><span class="count" id="shotPlanCount"></span></div>
+    <span class="hint" id="shotPlanHint"></span>
+    <div class="plansteps" id="shotPlanList"></div>
+    <label class="toggle"><input type="checkbox" data-photos-only> Solo foto (senza descrizione)</label>
+    <button class="go" type="button" id="shotPlanGo">Inizia gli scatti</button>
+    <button class="linkbtn" type="button" id="shotPlanNew" hidden>Annulla questo articolo e ricomincia</button>
   </section>
 
   <section class="panel">
@@ -36,7 +39,7 @@
     <div class="strip" id="aiStrip" role="listbox" aria-multiselectable="true" aria-label="Foto dell'annuncio"></div>
     <div class="empty" id="aiEmpty">
       <span>Non ci sono ancora foto.</span>
-      <button class="btn primary" type="button" data-goto="home">Aggiungi foto in Home</button>
+      <button class="btn primary" type="button" data-goto="home">Aggiungi foto in Carica</button>
     </div>
     <div class="linkrow" id="aiSelTools">
       <button class="linkbtn" type="button" id="aiAll">Seleziona tutte</button>
@@ -87,7 +90,7 @@
   </section>
 </main>
 
-<!-- ============ HOME ============ -->
+<!-- ============ CARICA (ex Home) ============ -->
 <main class="tab wrap" id="tab-home">
   <header class="apphead">
     <img class="applogo" src="logo.svg" alt="" width="40" height="40">
@@ -97,20 +100,40 @@
     </div>
     <button class="gear" type="button" data-goto="settings" aria-label="Impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
-  <p class="lead">Aggiungi le foto: le sistemo subito. Poi scrivo titolo, descrizione e hashtag.</p>
+  <p class="lead">Ogni articolo parte da qui: scegli cosa vendi e quali scatti fare, poi carica o scatta le foto.</p>
 
   <div class="notice" id="keyNotice" hidden>
     <span>Per scrivere le descrizioni serve la chiave API di Anthropic.</span>
     <button class="linkbtn" type="button" data-goto="settings">Aggiungila in Impostazioni →</button>
   </div>
 
+  <section class="panel" id="planPanel">
+    <div class="step"><span class="n">1</span><h2>Nuovo articolo</h2></div>
+    <div class="plan-active" id="planActive" hidden></div>
+    <div id="planSetup">
+      <div class="field">
+        <span class="label">Cosa vuoi fare?</span>
+        <div class="seg" data-mode-seg role="group" aria-label="Cosa vuoi fare">
+          <button type="button" data-v="full" aria-pressed="true">Foto + descrizione</button>
+          <button type="button" data-v="photos" aria-pressed="false">Solo foto</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">Che cosa vendi?</span>
+        <div class="seg" id="planCat" role="group" aria-label="Categoria"></div>
+      </div>
+      <div class="field" id="planStepsField">
+        <span class="label">Scatti da fare</span>
+        <div class="plansteps" id="planSteps"></div>
+        <span class="hint">Spegni gli scatti che non ti servono. La scaletta ti segue nella scheda Foto, dove puoi ancora cambiarla.</span>
+      </div>
+      <button class="go" type="button" id="planStart">Inizia gli scatti</button>
+      <span class="hint" id="planFreeHint" hidden>Carica le tue foto qui sotto: le sistemo subito. Poi puoi ritoccarle nella scheda Foto.</span>
+    </div>
+  </section>
+
   <section class="panel">
-    <div class="step"><span class="n">1</span><h2>Foto</h2><span class="count" id="count">0 / 20</span></div>
-    <button class="guided-cta" type="button" id="guidedStart">
-      <span class="gc-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c.5 4.2 2.8 6.5 7 7-4.2.5-6.5 2.8-7 7-.5-4.2-2.8-6.5-7-7 4.2-.5 6.5-2.8 7-7z"/></svg></span>
-      <span><strong id="guidedStartLabel">Nuovo annuncio guidato</strong><small>Scegli la categoria · Cappotto: copertina da negozio, fronte, retro e dettagli</small></span>
-      <span class="gc-arrow" aria-hidden="true">›</span>
-    </button>
+    <div class="step"><span class="n">2</span><h2>Foto</h2><span class="count" id="count">0 / 20</span></div>
     <button class="drop" type="button" id="drop">
       <strong>+ Aggiungi foto</strong>
       <span>Fino a 20 foto. La prima è la copertina. Tocca una foto per vederla grande; tienila premuta e trascinala per cambiare l'ordine.</span>
@@ -124,8 +147,8 @@
     </div>
   </section>
 
-  <section class="panel">
-    <div class="step"><span class="n">2</span><h2>Dettagli</h2></div>
+  <section class="panel" id="detailsPanel">
+    <div class="step"><span class="n">3</span><h2>Dettagli</h2></div>
     <div class="field">
       <span class="label">Categoria</span>
       <div class="seg" id="cat">
@@ -182,19 +205,14 @@
   </section>
 
   <button class="go" id="go" type="button" disabled>Scrivi l'annuncio</button>
+  <button class="go" id="saveStock" type="button" disabled hidden>Salva in Magazzino</button>
   <div class="status" id="status" role="status">Aggiungi almeno una foto per iniziare.</div>
 
   <section class="label-card" id="resText" hidden>
     <div class="out" id="out"></div>
   </section>
 
-  <button class="btn" id="reset" type="button" hidden>+ Nuovo annuncio</button>
-
-  <section class="panel" id="history" hidden>
-    <div class="step"><h2>Annunci creati</h2><span class="count" id="histCount"></span></div>
-    <span class="hint">Tocca un annuncio per rivederlo e ricopiarne il testo. Restano salvati solo su questo telefono.</span>
-    <ul class="hist" id="histList"></ul>
-  </section>
+  <button class="btn" id="reset" type="button" hidden>+ Nuovo articolo</button>
 </main>
 
 <!-- ============ DESCRIZIONE ============ -->
@@ -207,19 +225,39 @@
     </div>
   <button class="gear" type="button" data-goto="settings" aria-label="Impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </header>
-  <p class="lead">Scrivi qui il modello della tua descrizione. Quando creo l'annuncio, Claude lo segue e inserisce i dati dell'articolo.</p>
+  <p class="lead">Il tuo modello di descrizione: Claude lo segue quando scrive l'annuncio e mette i dati veri dell'articolo al posto delle parole tra graffe.</p>
   <section class="panel">
-    <div class="step"><h2>Il tuo modello</h2></div>
+    <div class="step"><h2>Il tuo modello</h2><span class="count" id="descSaved"></span></div>
+    <div class="field">
+      <span class="label">Tocca per inserire</span>
+      <div class="chips" id="descChips">
+        <button type="button" data-ph="{marca}">{marca}</button>
+        <button type="button" data-ph="{taglia}">{taglia}</button>
+        <button type="button" data-ph="{materiale}">{materiale}</button>
+        <button type="button" data-ph="{condizioni}">{condizioni}</button>
+        <button type="button" data-ph="{misure}">{misure}</button>
+      </div>
+    </div>
     <div class="field">
       <label class="label" for="descTemplate">Modello</label>
-      <textarea id="descTemplate" rows="12" placeholder="Es.: Cappotto elegante in ottime condizioni.&#10;Taglia: …&#10;Condizioni: …&#10;Spedisco in 24 ore. Scrivimi per qualsiasi domanda!"></textarea>
-      <span class="hint">Puoi usare queste parole: {marca}, {taglia}, {materiale}, {condizioni}, {misure}. Claude le sostituisce con i dati dell'articolo. Se lasci vuoto, uso lo stile standard.</span>
+      <textarea id="descTemplate" rows="11" placeholder="Scrivi qui, oppure tocca «Usa l'esempio»."></textarea>
+      <span class="hint">Si salva da solo mentre scrivi. Le righe con un dato che manca (es. misure non indicate) vengono tolte. Se il modello è vuoto, Claude usa il suo stile standard.</span>
     </div>
     <div class="toolbar">
-      <button class="btn primary" id="descSave" type="button">Salva modello</button>
+      <button class="btn" id="descExample" type="button">Usa l'esempio</button>
       <button class="btn" id="descReset" type="button">Svuota</button>
     </div>
     <div class="status" id="descStatus" role="status"></div>
+  </section>
+  <section class="panel">
+    <div class="step"><h2>Anteprima</h2></div>
+    <span class="hint" id="descPreviewHint">Con i dati dell'articolo in Carica (o con dati d'esempio). Claude poi scrive il testo vero guardando le foto.</span>
+    <pre class="desc-preview" id="descPreview"></pre>
+  </section>
+  <section class="panel">
+    <div class="step"><h2>Articolo in corso</h2></div>
+    <span class="hint" id="descNowHint">Nessuna foto in Carica.</span>
+    <button class="go" type="button" id="descWrite" disabled>Scrivi la descrizione ora</button>
   </section>
 </main>
 
@@ -233,7 +271,14 @@
     </div>
   <button class="gear" type="button" data-goto="settings" aria-label="Impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </header>
-  <p class="lead">Qui troverai tutti i tuoi articoli, con foto e stato. In arrivo.</p>
+  <p class="lead">I tuoi articoli salvati, con foto e stato. Tocca un articolo per cambiare lo stato, riaprirlo o eliminarlo. Restano su questo telefono.</p>
+  <div class="seg stock-filters" id="stockFilters" role="group" aria-label="Filtra per stato"></div>
+  <div class="empty" id="stockEmpty" hidden>
+    <span>Nessun articolo ancora. Quando scrivi un annuncio o salvi le foto, lo trovi qui.</span>
+    <button class="btn primary" type="button" data-goto="home">Carica un articolo</button>
+  </div>
+  <p class="hint" id="stockNone" hidden>Nessun articolo con questo stato.</p>
+  <ul class="stock" id="stockList"></ul>
 </main>
 
 <!-- ============ IMPOSTAZIONI ============ -->
@@ -370,6 +415,7 @@
 <script src="director.js"></script>
 <script src="director-ui.js"></script>
 <script src="presets.js"></script>
+<script src="stock.js"></script>
 <script src="quality.js"></script>
 <script src="guided-camera.js"></script>
 <script src="guided.js"></script>

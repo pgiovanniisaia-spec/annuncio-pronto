@@ -25,15 +25,28 @@ Le foto si sistemano anche senza internet. Per scrivere le descrizioni serve una
 
 Costo indicativo: con "Veloce", meno di un centesimo per annuncio. Con "Più accurato", qualche centesimo.
 
+## Le quattro schede
+La barra in basso ha quattro schede. Le **Impostazioni** sono dietro l'ingranaggio ⚙️ in alto a destra.
+1. **Carica** (gruccia) — il punto di partenza di ogni articolo. In «Nuovo articolo» scegli:
+   - **Foto + descrizione** oppure **Solo foto** (solo le foto, senza testo);
+   - che cosa vendi (oggi: Cappotto; oppure «Altro · carico io le foto»);
+   - gli **scatti da fare** (copertina 3/4, indossato facoltativo, fronte, retro): spegni quelli che non ti servono.
+   Poi tocca **Inizia gli scatti**, oppure carica tu le foto più in basso.
+2. **Foto** — la scaletta dell'articolo (puoi ancora accendere o spegnere scatti), i ritocchi e la Copertina con AI.
+3. **Descrizione** — il tuo modello di descrizione. Tocca **Usa l'esempio** e modificalo; le parole tra graffe
+   ({marca}, {taglia}, {materiale}, {condizioni}, {misure}) vengono sostituite con i dati veri.
+4. **Magazzino** — tutti gli articoli salvati con foto e stato (**Da pubblicare**, **Pubblicato**, **Venduto**).
+   Tocca un articolo per cambiare lo stato, **Riapri** (torna in Carica con foto e testo), **Copia testo** o **Elimina**.
+
 ## Servizio guidato: un cappotto in pochi tocchi
-1. In Home tocca **Nuovo annuncio guidato** e scegli **Cappotto**.
+1. In **Carica** scegli **Cappotto**, controlla gli scatti da fare e tocca **Inizia gli scatti**.
 2. Segui la scaletta. Per ogni passo puoi usare **Scatta** o **Scegli dalla galleria**:
    - **Copertina**: cappotto su una gruccia, appeso a una porta o a un gancio, contro un muro chiaro, con la luce di una finestra di lato. Tieni il telefono dritto, all'altezza del petto, a 1,5–2 m.
    - **Fronte** e **Retro**: cappotto steso sul letto o sul pavimento, foto dall'alto con il telefono parallelo al piano.
    - Nella fotocamera fai combaciare il cappotto con la **sagoma tratteggiata** e aspetta che la **bolla diventi verde**. Se compare «Luce scarsa», avvicinati alla finestra.
    - Se una foto è mossa, scura, storta o il cappotto è tagliato, l'app chiede «Rifai lo scatto?».
 3. Con **+ Aggiungi dettaglio** fotografa le etichette (marca, taglia e composizione) ed eventualmente fodera, bottoni, difetti e la foto con il metro. Se vuoi, scrivi le misure.
-4. Tocca **Elabora e crea l'annuncio**. Il lavoro sulle foto principali è già partito in sottofondo:
+4. Tocca **Elabora e crea l'annuncio** (in modalità «Solo foto»: **Elabora le foto**; la descrizione la puoi scrivere dopo). Il lavoro sulle foto principali è già partito in sottofondo:
    - la copertina diventa una foto da studio;
    - fronte e retro vengono raddrizzati, ritagliati e ripuliti dal disordine;
    - i dettagli restano foto vere.

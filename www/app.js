@@ -129,6 +129,9 @@ function showTab(name) {
     $("openaiKey").value = openaiKey; $("imgModel").value = imgModel; segSet("imgQuality", imgQuality);
   }
   if (name === "ai" && studio) { studio.sync(); if (studio.updateCost) studio.updateCost(); }
+  if (name === "ai" || name === "home") renderPlan();
+  if (name === "desc") { renderDescPreview(); updateDescNow(); }
+  if (name === "stock" && stock) stock.render();
 }
 section("schede", () => {
   document.addEventListener("click", e => {
@@ -137,36 +140,186 @@ section("schede", () => {
   });
 });
 
-section("descrizione", () => {
-  const ta = $("descTemplate"), st = $("descStatus");
-  if (!ta) return;
-  ta.value = store.get("ll_desc_template", "");
-  const say = t => { st.textContent = t; st.classList.remove("flash"); void st.offsetWidth; st.classList.add("flash"); };
-  $("descSave").addEventListener("click", () => { store.set("ll_desc_template", ta.value.trim()); say(ta.value.trim() ? "Modello salvato ✓" : "Modello vuoto: userò lo stile standard."); });
-  $("descReset").addEventListener("click", () => { ta.value = ""; store.set("ll_desc_template", ""); say("Modello svuotato."); });
+// ---------- modalità: «Foto + descrizione» o «Solo foto» ----------
+const mode = () => store.get("ll_mode", "full") === "photos" ? "photos" : "full";
+function setMode(v) {
+  store.set("ll_mode", v === "photos" ? "photos" : "full");
+  if (guided && guided.session()) guided.setPhotosOnly(v === "photos");
+  applyMode();
+}
+function applyMode() {
+  const photos = mode() === "photos";
+  document.querySelectorAll("[data-mode-seg]").forEach(g => [...g.children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === mode()))));
+  document.querySelectorAll("[data-photos-only]").forEach(c => { c.checked = photos; });
+  const dp = $("detailsPanel"); if (dp) dp.hidden = photos;
+  $("go").hidden = photos; $("saveStock").hidden = !photos;
+  refresh();
+}
+section("modalità", () => {
+  document.querySelectorAll("[data-mode-seg]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) setMode(b.dataset.v); }));
+  document.querySelectorAll("[data-photos-only]").forEach(c => c.addEventListener("change", () => setMode(c.checked ? "photos" : "full")));
+  applyMode();
 });
 
-section("scaletta", () => {
-  const box = $("stepsList"), L = window.LL_STEPS, P = window.LL_PRESETS && window.LL_PRESETS.PRESETS;
-  if (!box || !L || !P) return;
-  const id = "cappotto";
-  function draw() {
-    const off = L.off(id);
-    box.innerHTML = "";
-    P[id].steps.forEach(st => {
-      const lab = document.createElement("label"); lab.className = "toggle";
-      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !off.includes(st.id);
-      cb.addEventListener("change", () => {
-        let cur = L.off(id);
-        cur = cb.checked ? cur.filter(x => x !== st.id) : cur.concat(st.id);
-        if (P[id].steps.every(x => cur.includes(x.id))) { cur = cur.filter(x => x !== st.id); cb.checked = true; }
-        L.setOff(id, cur);
-      });
-      lab.appendChild(cb); lab.appendChild(document.createTextNode(" " + st.title));
-      box.appendChild(lab);
-    });
+// ---------- preimpostazione dell'articolo (Carica) e scaletta (Foto) ----------
+// In Carica si sceglie categoria e scatti; «Inizia gli scatti» apre il servizio guidato con quella
+// scaletta e passa alla scheda Foto. Nella scheda Foto la scaletta resta modificabile finché
+// non parte l'elaborazione (guided.setSteps).
+const planCat = () => store.get("ll_plan_cat", "cappotto");
+function planPresets() { const P = window.LL_PRESETS; return P ? P.ORDER.map(id => P.PRESETS[id]) : []; }
+function stepToggles(box, steps, isOn, onToggle, opts) {
+  box.innerHTML = "";
+  steps.forEach(st => {
+    const lab = document.createElement("label"); lab.className = "toggle planstep" + (st.done ? " done" : "");
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = isOn(st); cb.disabled = !!(opts && opts.locked) || !!st.done;
+    cb.addEventListener("change", () => { if (!onToggle(st, cb.checked)) cb.checked = !cb.checked; });
+    const t = document.createElement("span"); t.textContent = st.title;
+    lab.append(cb, t);
+    if (st.done) { const ok = document.createElement("small"); ok.textContent = "fatta ✓"; lab.append(ok); }
+    box.append(lab);
+  });
+}
+// scaletta predefinita (salvata sul telefono per categoria): almeno uno scatto acceso
+function toggleDefault(id) {
+  return (st, on) => {
+    const L = window.LL_STEPS, P = window.LL_PRESETS.PRESETS;
+    let off = L.off(id);
+    off = on ? off.filter(x => x !== st.id) : off.concat(st.id);
+    if (P[id].steps.every(x => off.includes(x.id))) return false;
+    L.setOff(id, off); renderPlan(); return true;
+  };
+}
+function renderPlan() {
+  const P = window.LL_PRESETS, L = window.LL_STEPS; if (!P || !L || !$("planPanel")) return;
+  const sess = guided ? guided.session() : null, running = sess && sess.stage !== "ready";
+  const cat = planCat(), pr = P.PRESETS[cat], usable = pr && !pr.soon;
+  const stageTxt = s => ({ steps: "scatti", process: "elaborazione", review: "controllo prima/dopo" }[s.stage] || "");
+
+  // --- Carica
+  $("planActive").hidden = !running; $("planSetup").hidden = !!running;
+  if (running) {
+    $("planActive").innerHTML = `<div class="pa-txt"><strong>Articolo in corso: ${sess.name}</strong>
+      <span class="hint">${sess.done} di ${sess.total} scatti fatti${sess.details ? ` · ${sess.details} dettagli` : ""} · fase: ${stageTxt(sess)}${sess.photosOnly ? " · solo foto" : ""}</span></div>
+      <div class="toolbar"><button class="btn primary" type="button" data-plan="resume">Continua</button><button class="btn" type="button" data-plan="photos">Vai a Foto</button><button class="btn danger" type="button" data-plan="cancel">Annulla articolo</button></div>`;
   }
-  draw();
+  $("planCat").innerHTML = planPresets().map(p => `<button type="button" data-v="${p.id}" aria-pressed="${cat === p.id}" ${p.soon ? "disabled" : ""}>${p.name}${p.soon ? " · presto" : ""}</button>`).join("")
+    + `<button type="button" data-v="free" aria-pressed="${cat === "free"}">Altro · carico io le foto</button>`;
+  $("planStepsField").hidden = !usable; $("planStart").hidden = !usable; $("planFreeHint").hidden = usable;
+  if (usable) stepToggles($("planSteps"), pr.steps, st => !L.off(cat).includes(st.id), toggleDefault(cat));
+
+  // --- Foto
+  const box = $("shotPlanList"), go = $("shotPlanGo");
+  $("shotPlanNew").hidden = !running;
+  if (running) {
+    const locked = sess.stage !== "steps";
+    $("shotPlanTitle").textContent = "Scaletta: " + sess.name;
+    $("shotPlanCount").textContent = `${sess.done}/${sess.total}`;
+    $("shotPlanHint").textContent = locked ? "Le foto sono in elaborazione: la scaletta non si può più cambiare." : "Accendi o spegni gli scatti di questo articolo. Gli scatti già fatti restano.";
+    box.hidden = false;
+    stepToggles(box, sess.steps, st => st.on, (st, on) => {
+      const ids = sess.steps.filter(x => x.id === st.id ? on : x.on).map(x => x.id);
+      return ids.length ? guided.setSteps(ids) : false;
+    }, { locked });
+    go.hidden = false; go.textContent = sess.stage === "steps" ? (sess.done ? "Continua gli scatti" : "Inizia gli scatti") : "Apri il servizio";
+  } else {
+    $("shotPlanTitle").textContent = "Scaletta foto";
+    $("shotPlanCount").textContent = "";
+    box.hidden = !usable; go.hidden = !usable;
+    $("shotPlanHint").textContent = usable ? `Preimpostata per «${pr.name}» (la scegli in Carica). Spegni quello che non ti serve, poi inizia.` : "In Carica hai scelto di caricare tu le foto: usa i ritocchi qui sotto.";
+    if (usable) { stepToggles(box, pr.steps, st => !L.off(cat).includes(st.id), toggleDefault(cat)); go.textContent = "Inizia gli scatti"; }
+  }
+}
+async function startPlan() {
+  const cat = planCat(), L = window.LL_STEPS;
+  if (!guided || cat === "free") return;
+  showTab("ai");
+  await guided.start(cat, { photosOnly: mode() === "photos", steps: L.active(cat).map(x => x.id) });
+}
+section("preimpostazione", () => {
+  $("planCat").addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (!b || b.disabled) return; store.set("ll_plan_cat", b.dataset.v); renderPlan(); });
+  $("planStart").addEventListener("click", startPlan);
+  $("shotPlanGo").addEventListener("click", () => { if (guided && guided.session() && guided.session().stage !== "ready") guided.resume(); else startPlan(); });
+  const cancel = async b => {
+    if (b.dataset.sure !== "1") { const old = b.textContent; b.dataset.sure = "1"; b.textContent = "Tocca di nuovo per annullare"; setTimeout(() => { b.dataset.sure = ""; b.textContent = old; }, 3000); return; }
+    b.dataset.sure = ""; await guided.cancel(); renderPlan();
+  };
+  $("shotPlanNew").addEventListener("click", e => cancel(e.currentTarget));
+  $("planActive").addEventListener("click", e => {
+    const b = e.target.closest("[data-plan]"); if (!b) return;
+    if (b.dataset.plan === "resume") guided.resume();
+    else if (b.dataset.plan === "photos") showTab("ai");
+    else cancel(b);
+  });
+});
+
+// ---------- modello di descrizione (scheda Descrizione) ----------
+const DESC_KEY = "ll_desc_template";
+const DESC_EXAMPLE = `Capo in {condizioni}, tenuto con cura.
+
+🏷️ Marca: {marca}
+📏 Taglia: {taglia}
+🧵 Materiale: {materiale}
+📐 Misure: {misure}
+
+Nessun difetto oltre a quelli visibili in foto.
+📦 Spedisco in 24–48 ore, imballato con cura.
+💬 Per qualsiasi domanda scrivimi pure!`;
+// sostituisce i segnaposto con i dati dell'articolo; toglie le righe con un dato mancante
+function fillTemplate(tpl, d) {
+  const v = { marca: d.brand, taglia: d.size, materiale: d.material, condizioni: (d.cond || "").toLowerCase(), misure: d.misure };
+  const PH = /\{(marca|taglia|materiale|condizioni|misure)\}/g;
+  return tpl.split("\n")
+    .filter(line => (line.match(PH) || []).every(m => v[m.slice(1, -1)]))
+    .map(line => line.replace(PH, (m, k) => v[k]))
+    .join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+function currentFill() {
+  const d = getDetails();
+  return { brand: d.brand, size: d.size, material: d.material, cond: d.cond, misure: S.cat === "Capispalla" ? measuresText() : "" };
+}
+function renderDescPreview() {
+  const tpl = $("descTemplate").value.trim(), pv = $("descPreview");
+  if (!tpl) { pv.textContent = "Modello vuoto: Claude usa il suo stile standard."; return; }
+  const real = currentFill(), any = real.brand || real.size || real.material || real.misure;
+  const sample = { brand: "Max Mara", size: "IT 46", material: "80% lana, 20% cashmere", cond: "Ottime condizioni", misure: "spalle 44 cm, lunghezza 98 cm" };
+  $("descPreviewHint").textContent = any ? "Con i dati dell'articolo in Carica. Claude poi scrive il testo vero guardando le foto." : "Con dati d'esempio (in Carica non ci sono ancora dati). Claude poi scrive il testo vero guardando le foto.";
+  pv.textContent = fillTemplate(tpl, any ? real : sample);
+}
+function updateDescNow() {
+  const n = S.items.length, h = $("descNowHint"), b = $("descWrite");
+  if (!h) return;
+  b.disabled = !n || S.writing;
+  h.textContent = !n ? "Nessuna foto in Carica: aggiungi o riapri un articolo." : S.text ? `${n} foto · descrizione già scritta: puoi riscriverla col modello aggiornato.` : `${n} foto in Carica, descrizione ancora da scrivere.`;
+  b.textContent = S.text ? "Riscrivi la descrizione" : "Scrivi la descrizione ora";
+}
+section("descrizione", () => {
+  const ta = $("descTemplate"), st = $("descStatus");
+  ta.value = store.get(DESC_KEY, "");
+  const say = t => { st.textContent = t; st.classList.remove("flash"); void st.offsetWidth; st.classList.add("flash"); };
+  let t = 0;
+  const persist = () => { store.set(DESC_KEY, ta.value.trim()); $("descSaved").textContent = ta.value.trim() ? "salvato ✓" : ""; renderDescPreview(); };
+  ta.addEventListener("input", () => { clearTimeout(t); t = setTimeout(persist, 400); });
+  $("descChips").addEventListener("click", e => {
+    const b = e.target.closest("[data-ph]"); if (!b) return;
+    const a = ta.selectionStart ?? ta.value.length, z = ta.selectionEnd ?? a;
+    ta.value = ta.value.slice(0, a) + b.dataset.ph + ta.value.slice(z);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = a + b.dataset.ph.length;
+    persist();
+  });
+  $("descExample").addEventListener("click", e => {
+    const b = e.currentTarget;
+    if (ta.value.trim() && b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Sostituisco il tuo modello?"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Usa l'esempio"; }, 3000); return; }
+    b.dataset.sure = ""; b.textContent = "Usa l'esempio";
+    ta.value = DESC_EXAMPLE; persist(); say("Esempio inserito: modificalo come preferisci.");
+  });
+  $("descReset").addEventListener("click", e => {
+    const b = e.currentTarget;
+    if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Tocca di nuovo per svuotare"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Svuota"; }, 3000); return; }
+    b.dataset.sure = ""; b.textContent = "Svuota";
+    ta.value = ""; persist(); say("Modello svuotato: userò lo stile standard.");
+  });
+  $("descWrite").addEventListener("click", () => { if (!S.items.length) return; showTab("home"); $("go").onclick(); });
+  persist();
 });
 
 section("dettagli", () => {
@@ -649,9 +802,11 @@ function refresh() {
   if (c.textContent !== txt) { c.textContent = txt; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
   $("photoTools").hidden = !ready;
   $("go").disabled = !n || S.writing;
+  $("saveStock").disabled = !n || ready < n;
   if (studio) studio.sync();
+  updateDescNow();
   if (!S.writing && !$("status").classList.contains("err")) {
-    setStatus(!n ? "Aggiungi almeno una foto per iniziare." : ready < n ? `Sistemo le foto… ${ready} di ${n}` : `${n} ${n === 1 ? "foto pronta" : "foto pronte"}. Ora puoi scrivere l'annuncio.`);
+    setStatus(!n ? "Aggiungi almeno una foto per iniziare." : ready < n ? `Sistemo le foto… ${ready} di ${n}` : `${n} ${n === 1 ? "foto pronta" : "foto pronte"}. ${mode() === "photos" ? "Salvale in Magazzino o condividile." : "Ora puoi scrivere l'annuncio."}`);
   }
 }
 
@@ -844,9 +999,10 @@ function fallbackText() {
   const material = $("material").value.trim(), mis = S.cat === "Capispalla" ? measuresText() : "";
   const tipo = S.guidedTipo || { Scarpe: "Scarpe", Abbigliamento: "Capo", Capispalla: "Giacca" }[S.cat];
   const cond = $("cond").value;
+  const tpl = store.get(DESC_KEY, "").trim();
   return {
     titolo: [tipo, brand, size && ("taglia " + size)].filter(Boolean).join(" "),
-    descrizione: [
+    descrizione: tpl ? [fillTemplate(tpl, currentFill()), ...(notes ? ["", notes] : []), ...(S.guidedNote ? ["", S.guidedNote] : [])].join("\n") : [
       `${tipo}${brand ? " " + brand : ""} in ${cond.toLowerCase()}.`,
       ...(notes ? [notes] : []),
       ...(size ? [`Taglia: ${size}`] : []),
@@ -884,11 +1040,13 @@ on("go", async () => {
   S.text = text;
   S.histId = saveHistory(text, S.histId);
   renderText(text, S.histId);
+  snapshotSoon(S.histId);
   S.writing = false;
   $("status").classList.remove("err");
   if (note) setStatus(note, true); else { setStatus("Fatto. Condividi le foto e copia il testo su Vinted."); }
   $("go").disabled = false; $("go").textContent = "Riscrivi l'annuncio";
   $("reset").hidden = false;
+  updateDescNow();
 });
 
 function mkBtn(text, fn, cls) { const b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (cls ? " " + cls : ""); b.textContent = text; b.onclick = fn; return b; }
@@ -948,15 +1106,8 @@ async function copy(text, el) {
   setTimeout(() => { el.textContent = old; el.classList.remove("ok"); }, 1500);
 }
 
-// ---------- storico annunci (salvato sul telefono) ----------
-const HIST_KEY = "ap_history", HIST_MAX = 40;
-function loadHistory() { try { const a = JSON.parse(store.get(HIST_KEY, "[]")); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
-function writeHistory(list) {
-  // se lo spazio finisce, togliamo i più vecchi finché ci sta
-  for (let l = list.slice(0, HIST_MAX); ; l = l.slice(0, -1)) {
-    try { localStorage.setItem(HIST_KEY, JSON.stringify(l)); return; } catch (_) { if (!l.length) return; }
-  }
-}
+// ---------- Magazzino (stock.js): ogni annuncio scritto o «solo foto» salvato diventa un articolo ----------
+let stock = null;
 function coverThumb() {
   const it = S.items.find(i => i.cv && i.el.classList.contains("has-img"));
   if (!it) return "";
@@ -964,76 +1115,86 @@ function coverThumb() {
   try { c.getContext("2d").drawImage(it.proc || it.cv, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7); } catch (_) { return ""; }
 }
 function saveHistory(t, id) {
-  const list = loadHistory();
-  const entry = {
-    id: id || Date.now(), date: Date.now(), cat: S.cat,
+  if (!stock) return id || null;
+  return stock.upsert({ id: id || undefined, cat: S.cat, tipo: S.guidedTipo || undefined, photosOnly: false,
     titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag || [], controlli: t.controlli || [],
-    thumb: coverThumb()
-  };
-  writeHistory([entry, ...list.filter(e => e.id !== entry.id)]);
-  renderHistory();
-  return entry.id;
+    thumb: coverThumb() || undefined, details: getDetails() });
 }
 let editTimer = 0;
 function saveHistoryEditSoon(id, t) {
-  if (!id) return;
+  if (!id || !stock) return;
   clearTimeout(editTimer);
-  editTimer = setTimeout(() => {
-    const list = loadHistory(), e = list.find(x => x.id === id);
-    if (!e) return;
-    e.titolo = t.titolo; e.descrizione = t.descrizione;
-    writeHistory(list); renderHistory();
-  }, 400);
+  editTimer = setTimeout(() => stock.patch(id, { titolo: t.titolo, descrizione: t.descrizione }), 400);
 }
 function fmtDate(ms) {
   const d = new Date(ms);
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
 }
-function renderHistory() {
-  const list = loadHistory(), ul = $("histList");
-  $("history").hidden = !list.length;
-  $("histCount").textContent = list.length ? String(list.length) : "";
-  ul.innerHTML = "";
-  for (const e of list) {
-    const li = document.createElement("li");
-    const open = document.createElement("button"); open.type = "button"; open.className = "histopen";
-    const im = document.createElement(e.thumb ? "img" : "span"); im.className = "histthumb";
-    if (e.thumb) { im.src = e.thumb; im.alt = ""; }
-    const txt = document.createElement("span"); txt.className = "histtxt";
-    const ti = document.createElement("strong"); ti.textContent = e.titolo || "Senza titolo";
-    const me = document.createElement("span"); me.className = "hint"; me.textContent = `${e.cat || ""} · ${fmtDate(e.date)}`;
-    txt.append(ti, me); open.append(im, txt);
-    open.onclick = () => openHistory(e.id);
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn small histdel"; del.textContent = "Elimina";
-    del.onclick = () => {
-      if (del.dataset.sure !== "1") { del.dataset.sure = "1"; del.textContent = "Sicuro?"; setTimeout(() => { del.dataset.sure = ""; del.textContent = "Elimina"; }, 2500); return; }
-      writeHistory(loadHistory().filter(x => x.id !== e.id));
-      if (S.histId === e.id) S.histId = null;
-      renderHistory();
-    };
-    li.append(open, del); ul.append(li);
-  }
+// foto finali in Magazzino: si aspetta che la griglia abbia finito di sistemarle (massimo 1 minuto)
+let snapTimer = 0;
+function snapshotSoon(id) {
+  if (!id || !stock) return;
+  clearTimeout(snapTimer);
+  const t0 = Date.now();
+  const tick = async () => {
+    const busy = queue.length || active || S.items.some(i => i.el.classList.contains("working") || !i.outPromise);
+    if (busy && Date.now() - t0 < 60000) { snapTimer = setTimeout(tick, 600); return; }
+    try { await stock.savePhotos(id, await orderedBlobs()); } catch (_) {}
+  };
+  snapTimer = setTimeout(tick, 600);
 }
-function openHistory(id) {
-  const e = loadHistory().find(x => x.id === id);
-  if (!e) return;
-  const t = { titolo: e.titolo, descrizione: e.descrizione, hashtag: e.hashtag, controlli: [] };
-  $("resText").hidden = false;
-  $("resText").classList.remove("show"); void $("resText").offsetWidth; $("resText").classList.add("show");
-  renderText(t, e.id, e.date);
-  $("resText").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+async function saveStockNow(extra) {
+  if (!stock || !photosReady()) return null;
+  const id = stock.upsert(Object.assign({ id: S.histId || undefined, cat: S.cat, photosOnly: !S.text, thumb: coverThumb() || undefined, details: getDetails() },
+    S.text ? { titolo: S.text.titolo, descrizione: S.text.descrizione, hashtag: S.text.hashtag || [] } : {}, extra || {}));
+  S.histId = id;
+  await stock.savePhotos(id, await orderedBlobs());
+  return id;
 }
-section("storico", renderHistory);
+// riapre un articolo del Magazzino in Carica: foto finali (già sistemate), dettagli e testo
+async function reopenArticle(e, blobs) {
+  showTab("home");
+  window.scrollTo({ top: 0 });
+  await loadGrid(blobs.map((b, i) => ({ blob: b, name: fname(i), stored: true })));
+  if (["Scarpe", "Abbigliamento", "Capispalla"].includes(e.cat)) setCategory(e.cat);
+  ["brand", "size", "material", "notes", ...Object.values(MEASURES)].forEach(id => { $(id).value = ""; });
+  if (e.details) setDetails(e.details);
+  S.histId = e.id;
+  if (e.descrizione) {
+    S.text = { titolo: e.titolo, descrizione: e.descrizione, hashtag: e.hashtag || [], controlli: [] };
+    $("resText").hidden = false; renderText(S.text, e.id, e.date);
+    $("go").textContent = "Riscrivi l'annuncio";
+  } else { $("go").textContent = "Scrivi l'annuncio"; }
+  $("reset").hidden = false;
+  refresh();
+  setStatus(blobs.length ? `Articolo riaperto: ${blobs.length} foto.` : "Articolo riaperto (foto non salvate su questo telefono).", !blobs.length);
+}
+section("magazzino", () => {
+  stock = window.createStock({
+    haptic,
+    copy: e => copyPlain(fullText(e)),
+    busyGrid: id => S.items.length > 0 && S.histId !== id,
+    reopen: reopenArticle,
+    onRemoved: id => { if (S.histId === id) S.histId = null; }
+  });
+});
+on("saveStock", async () => {
+  busy("saveStock", true);
+  try {
+    const id = await saveStockNow();
+    if (id) { setStatus("Salvato in Magazzino ✓"); $("reset").hidden = false; }
+  } finally { busy("saveStock", false); refresh(); }
+});
 
 // ---------- nuovo annuncio ----------
 on("reset", () => {
   const b = $("reset");
   if (b.dataset.sure !== "1") {
     b.dataset.sure = "1"; b.textContent = "Tocca di nuovo per svuotare tutto";
-    setTimeout(() => { b.dataset.sure = ""; b.textContent = "+ Nuovo annuncio"; }, 3000);
+    setTimeout(() => { b.dataset.sure = ""; b.textContent = "+ Nuovo articolo"; }, 3000);
     return;
   }
-  b.dataset.sure = ""; b.textContent = "+ Nuovo annuncio"; b.hidden = true;
+  b.dataset.sure = ""; b.textContent = "+ Nuovo articolo"; b.hidden = true;
   S.items.forEach(it => { it.ver++; it.el.remove(); });
   $("grid").classList.remove("sorting");
   S.items = []; S.text = null; S.histId = null; S.directorAnalysis = null;
@@ -1124,7 +1285,7 @@ async function createCover(it, useRef) {
   await useAiImage(it, r.blob);
   it.director = record(r);
   moveToFront(it);
-  return `Copertina pronta in Home (badge ✦ AI), ${r.shots.length} ${r.shots.length === 1 ? "scatto" : "scatti"}. Costo reale: ${costLine(r.costs)}.`;
+  return `Copertina pronta in Carica (badge ✦ AI), ${r.shots.length} ${r.shots.length === 1 ? "scatto" : "scatti"}. Costo reale: ${costLine(r.costs)}.`;
 }
 
 // ---------- alternativa gratuita: app ChatGPT ----------
@@ -1242,14 +1403,14 @@ section("studio", () => {
         });
       }
       await rerender(list);
-      return found ? `Ritaglio fatto su ${found} ${found === 1 ? "foto" : "foto"}. Le trovi in Home.` : "Claude non ha trovato un ritaglio migliore: le foto restano com'erano.";
+      return found ? `Ritaglio fatto su ${found} ${found === 1 ? "foto" : "foto"}. Le trovi in Carica.` : "Claude non ha trovato un ritaglio migliore: le foto restano com'erano.";
     },
     createCover: (it, useRef) => createCover(it, useRef),
     async keepOriginal(list) { for (const it of list) await keepOriginal(it); return "Ripristinate le foto originali."; },
     async applyTilt(list, deg) {
       list.forEach(it => { it.tilt = deg; if (deg) it.edits.add("straighten"); else it.edits.delete("straighten"); });
       await rerender(list);
-      return deg ? `Foto raddrizzate di ${deg.toLocaleString("it-IT")}°. Le trovi in Home.` : "Raddrizzamento tolto.";
+      return deg ? `Foto raddrizzate di ${deg.toLocaleString("it-IT")}°. Le trovi in Carica.` : "Raddrizzamento tolto.";
     }
   });
   studio.sync();
@@ -1257,7 +1418,9 @@ section("studio", () => {
 
 // ---------- servizio guidato (guided.js) ----------
 let guided = null;
-async function replaceGrid(entries) {
+async function replaceGrid(entries) { return loadGrid(entries); }
+// sostituisce le foto della griglia; stored = foto finali dal Magazzino (già sistemate: nessuna nuova correzione)
+async function loadGrid(entries) {
   S.items.forEach(it => { it.ver++; it.el.remove(); });
   S.items = []; S.text = null; S.histId = null;
   $("resText").hidden = true; $("out").innerHTML = "";
@@ -1265,8 +1428,8 @@ async function replaceGrid(entries) {
   const jobs = entries.slice(0, MAX).map((e, i) => {
     const file = new File([e.blob], `${String(i + 1).padStart(2, "0")}-${e.name || "foto.jpg"}`, { type: e.blob.type || "image/jpeg" });
     const it = newItem(file, {
-      step: e.step, lockCrop: true,                   // ordine e ritaglio decisi dal servizio guidato
-      noEnhance: !!e.ai, aiNative: !!e.ai, box: e.ai ? null : (e.box || null),
+      step: e.step || null, lockCrop: true,           // ordine e ritaglio decisi dal servizio guidato
+      noEnhance: !!(e.ai || e.stored), aiNative: !!(e.ai || e.stored), box: e.ai || e.stored ? null : (e.box || null),
       ...(e.rawBlob ? { rawFile: new File([e.rawBlob], "originale.jpg", { type: e.rawBlob.type || "image/jpeg" }) } : {}),
       origFile: e.origBlob ? new File([e.origBlob], "originale.jpg", { type: e.origBlob.type || "image/jpeg" }) : null
     });
@@ -1316,15 +1479,14 @@ section("servizio guidato", () => {
     async shareAll() { await $("shareAll").onclick(); return $("status").textContent; },
     gridCount: () => S.items.length,
     showTab,
-    onClose: () => updateGuidedButton()
+    photosOnly: () => mode() === "photos",
+    // «solo foto»: l'articolo va in Magazzino con le foto, senza testo
+    async savePhotosOnly(o) { return saveStockNow({ photosOnly: true, tipo: o && o.tipo, id: S.histId || (o && o.stockId) || undefined }); },
+    onChange: () => renderPlan(),
+    onClose: () => renderPlan()
   });
-  $("guidedStart").onclick = () => { if (guided.hasSaved()) guided.resume(); else guided.open(); };
-  updateGuidedButton();
+  renderPlan();
 });
-function updateGuidedButton() {
-  const l = $("guidedStartLabel"); if (!l || !guided) return;
-  l.textContent = guided.hasSaved() ? "Riprendi l'annuncio guidato" : "Nuovo annuncio guidato";
-}
 
 // ---------- caricamento iniziale ----------
 // La splash nativa (bianca, col logo) si chiude appena la pagina è pronta; la splash

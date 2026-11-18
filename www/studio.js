@@ -1,5 +1,5 @@
 // Scheda "AI": lo studio dove si applicano le sistemazioni alle foto selezionate.
-// app.js lo crea con createStudio(api); i risultati tornano nella griglia di Home (stesse foto, stesso ordine).
+// app.js lo crea con createStudio(api); i risultati tornano nella griglia di Carica (stesse foto, stesso ordine).
 (function () {
   "use strict";
 
@@ -85,7 +85,7 @@
       busy = true; sync(); status(`${label}…`);
       try {
         const msg = await fn(list);
-        status(msg || `Fatto: ${list.length} ${list.length === 1 ? "foto aggiornata" : "foto aggiornate"}. Le trovi in Home.`);
+        status(msg || `Fatto: ${list.length} ${list.length === 1 ? "foto aggiornata" : "foto aggiornate"}. Le trovi in Carica.`);
       } catch (e) {
         status(e && e.message ? e.message : "Operazione non riuscita.", true);
       } finally { busy = false; sync(); }
@@ -114,7 +114,7 @@
     }
     $("aiCover").addEventListener("click", async () => {
       const list = api.items(), it = selected()[0] || list[0];
-      if (!it) { status("Aggiungi prima una foto in Home.", true); return; }
+      if (!it) { status("Aggiungi prima una foto in Carica.", true); return; }
       busy = true; sync(); status("Il regista è al lavoro…");
       try { status(await api.createCover(it, $("aiUseRef").checked && hasRef)); }
       catch (e) { status(e && e.message ? e.message : "Operazione non riuscita.", true); }

@@ -101,6 +101,7 @@
       saveTimer = setTimeout(() => {
         if (!G) return;
         try { G.fields = api.getDetails(); localStorage.setItem(STATE_KEY, JSON.stringify(G)); } catch (_) {}
+        api.onChange && api.onChange();
       }, 150);
     }
     function load() { try { const s = JSON.parse(localStorage.getItem(STATE_KEY) || "null"); return s && s.v === 1 && P.PRESETS[s.preset] ? s : null; } catch (_) { return null; } }
@@ -109,6 +110,7 @@
       urls.clear(); canv.clear(); G = null;
       try { localStorage.removeItem(STATE_KEY); } catch (_) {}
       await DB.clear();
+      api.onChange && api.onChange();
     }
     async function blobUrl(key) {
       if (urls.has(key)) return urls.get(key);
@@ -176,14 +178,17 @@
           <button type="button" class="g-cat${p.soon ? " soon" : ""}" data-act="pick" data-preset="${id}" ${p.soon ? "disabled" : ""}>
             <svg viewBox="0 0 120 90" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${p.icon}</svg>
             <strong>${esc(p.name)}</strong><span>${p.soon ? "In arrivo" : "Copertina da negozio, fronte, retro e dettagli"}</span></button>`; }).join("")}</div>
-        ${api.gridCount() ? `<p class="g-note">Le ${api.gridCount()} foto ora in Home verranno sostituite da quelle del servizio.</p>` : ""}`;
+        ${api.gridCount() ? `<p class="g-note">Le ${api.gridCount()} foto ora in Carica verranno sostituite da quelle del servizio.</p>` : ""}`;
       $g("gFoot").innerHTML = "";
     }
-    async function startPreset(id) {
+    async function startPreset(id, opts) {
+      opts = opts || {};
       await clearSession();
       const p = P.PRESETS[id];
-      G = { v: 1, preset: id, stage: "steps", mode: api.keys().openai ? "ai" : "local", shots: [], labels: null, fields: null, reviewed: {}, detailPick: null, startedAt: Date.now() };
-      (window.LL_STEPS ? window.LL_STEPS.active(id) : p.steps).forEach(st => G.shots.push({ uid: uid(), kind: "main", step: st.id, status: "empty", issues: [], framing: null, tilt: null, box: null, ai: "none", aiErr: "", choice: null, proc: "idle", at: 0 }));
+      G = { v: 1, preset: id, stage: "steps", mode: api.keys().openai ? "ai" : "local", shots: [], labels: null, fields: null, reviewed: {}, detailPick: null, startedAt: Date.now(),
+        photosOnly: opts.photosOnly != null ? !!opts.photosOnly : !!(api.photosOnly && api.photosOnly()) };
+      const steps = opts.steps ? p.steps.filter(x => opts.steps.includes(x.id)) : (window.LL_STEPS ? window.LL_STEPS.active(id) : p.steps);
+      (steps.length ? steps : p.steps).forEach(st => G.shots.push({ uid: uid(), kind: "main", step: st.id, status: "empty", issues: [], framing: null, tilt: null, box: null, ai: "none", aiErr: "", choice: null, proc: "idle", at: 0 }));
       api.setCategory(p.cat);
       save(); render();
     }
@@ -217,6 +222,7 @@
           <div class="g-btns"><button type="button" class="btn primary" data-act="shoot" data-uid="${s.uid}">📷 Scatta</button>
             <button type="button" class="btn" data-act="gallery" data-uid="${s.uid}">Scegli dalla galleria</button></div>
         </div>` : `<div class="g-step-actions"><button type="button" class="linkbtn" data-act="shoot" data-uid="${s.uid}">${done ? "Rifai lo scatto" : "Scatta"}</button><button type="button" class="linkbtn" data-act="gallery" data-uid="${s.uid}">Dalla galleria</button></div>`}
+        ${mains().length > 1 ? `<button type="button" class="linkbtn g-skip" data-act="dropstep" data-uid="${s.uid}">Togli dalla scaletta</button>` : ""}
       </section>`;
     }
     function renderSteps() {
@@ -233,6 +239,7 @@
           ${aiOn && hasOpenai ? `<div id="gRefBox"></div>` : ""}
         </div>
         <h2 class="g-h">Scaletta di scatto</h2>
+        ${missingSteps().length ? `<div class="g-addback"><span class="hint">Tolti:</span>${missingSteps().map(x => `<button type="button" class="linkbtn" data-act="addstep" data-step="${x.id}">+ ${esc(x.short)}</button>`).join("")}</div>` : ""}
         ${ms.map((s, i) => stepCard(s, i, i === cur)).join("")}
         <section class="g-step g-details${ok ? " current" : ""}">
           <div class="g-step-head"><span class="g-num">+</span><div><strong>Dettagli facoltativi</strong><small>Etichette, fodera, tasche, difetti, metro: restano foto reali, mai modificate con l'AI.</small></div></div>
@@ -247,10 +254,10 @@
       const refHost = $g("gRefBox");
       if (refHost && window.LLStyleRef) window.LLStyleRef.mount(refHost);
       const missing = ms.filter(s => s.status !== "ok").map(s => stepOf(s).short);
-      $g("gFoot").innerHTML = `<button type="button" class="go" data-act="process" ${ok ? "" : "disabled"}>Elabora e crea l'annuncio</button>
+      $g("gFoot").innerHTML = `<button type="button" class="go" data-act="process" ${ok ? "" : "disabled"}>${G.photosOnly ? "Elabora le foto" : "Elabora e crea l'annuncio"}</button>
         <span class="hint">${ok ? (running ? "Sto già elaborando le prime foto in sottofondo…" : "Puoi aggiungere dettagli prima di continuare.") : "Mancano: " + missing.join(", ")}</span>`;
       fillThumbs();
-      // le misure si salvano nei Dettagli di Home
+      // le misure si salvano nei Dettagli di Carica
       root.querySelectorAll("[data-measure]").forEach(inp => inp.addEventListener("change", () => {
         const m = Object.assign({}, api.getDetails().measures || {}); m[inp.dataset.measure] = inp.value; api.setDetails({ measures: m }); save();
       }));
@@ -410,7 +417,7 @@
           ${labels ? `<li class="${G.labelsState === "working" ? "working" : G.labelsState === "done" ? "done" : ""}"><span class="g-pthumb g-picon">🏷️<i class="ring"></i></span>
             <div><strong>Lettura etichette</strong><small>${esc(labelSummary())}</small></div></li>` : ""}
           <li class="${G.writing ? "working" : G.textDone ? "done" : ""}"><span class="g-pthumb g-picon">✍️<i class="ring"></i></span>
-            <div><strong>Annuncio</strong><small>${G.writing ? "Scrivo titolo, descrizione e hashtag…" : G.textDone ? "Pronto" : "Dopo le foto"}</small></div></li>
+            <div><strong>Annuncio</strong><small>${G.photosOnly ? "Solo foto: la descrizione la scrivi quando vuoi" : G.writing ? "Scrivo titolo, descrizione e hashtag…" : G.textDone ? "Pronto" : "Dopo le foto"}</small></div></li>
         </ul>`;
       $g("gFoot").innerHTML = `<button type="button" class="btn" data-act="back">← Torna agli scatti</button>`;
       fillThumbs();
@@ -524,12 +531,17 @@
           });
         }
         await api.replaceGrid(entries);
-        const anyAiCover = list.some(s => s.step === "cover" && s.choice === "ai");
-        const r = await api.writeListing(listingRules(anyAiCover));
-        G.textDone = true; G.note = r && r.note || "";
+        if (G.photosOnly) {
+          // solo foto: niente testo; l'articolo va in Magazzino con le foto
+          G.note = ""; G.stockId = await api.savePhotosOnly({ tipo: preset().tipo, stockId: G.stockId });
+        } else {
+          const r = await api.writeListing(listingRules(anyAiCoverOf(list)));
+          G.textDone = true; G.note = r && r.note || "";
+        }
       } catch (e) { G.note = e.message || ""; }
       G.writing = false; G.finalizing = false; G.stage = "ready"; save(); render();
     }
+    const anyAiCoverOf = list => list.some(s => s.step === "cover" && s.choice === "ai");
     function listingRules(aiCover) {
       const p = preset(), l = G.labels || {};
       return [
@@ -545,18 +557,18 @@
     // ---------- 6. annuncio pronto ----------
     function renderReady() {
       const t = api.textNow(), list = finalOrder();
-      $g("gBody").innerHTML = `<div class="g-ready"><span class="g-ok">✓</span><h2 class="g-h">Annuncio pronto</h2>
-          <p class="g-lead">Foto già nell'ordine giusto per Vinted. Puoi cambiarlo in Home trascinando.</p></div>
+      $g("gBody").innerHTML = `<div class="g-ready"><span class="g-ok">✓</span><h2 class="g-h">${t ? "Annuncio pronto" : "Foto pronte"}</h2>
+          <p class="g-lead">Foto già nell'ordine giusto per Vinted e salvate in Magazzino. Puoi cambiare l'ordine in Carica trascinando.</p></div>
         <div class="g-strip">${list.map((s, i) => `<figure>${thumbHtml(s, "")}<figcaption>${i + 1}${s.choice === "ai" ? " · ✦ AI" : ""}</figcaption></figure>`).join("")}</div>
         ${t ? `<div class="g-text"><strong>${esc(t.titolo)}</strong><p>${esc(t.descrizione)}</p><span class="hint">${esc((t.hashtag || []).join(" "))}</span></div>` : ""}
         ${G.note ? `<p class="g-note">${esc(G.note)}</p>` : ""}
         <div class="status" id="gStatus" role="status"></div>`;
       root.querySelectorAll(".g-strip img[data-thumb]").forEach(img => { img.dataset.which = "result"; });
       $g("gFoot").innerHTML = `<div class="g-final">
-          <button type="button" class="btn primary" data-act="copy">Copia testo</button>
-          <button type="button" class="btn" data-act="savephotos">Salva foto in ordine</button>
+          ${t ? `<button type="button" class="btn primary" data-act="copy">Copia testo</button>` : `<button type="button" class="btn primary" data-act="writenow">Scrivi anche la descrizione</button>`}
+          <button type="button" class="btn${t ? "" : " primary"}" data-act="savephotos">Salva foto in ordine</button>
           <button type="button" class="btn" data-act="share">Condividi</button>
-          <button type="button" class="linkbtn" data-act="tohome">Apri in Home per modificare</button></div>`;
+          <button type="button" class="linkbtn" data-act="tohome">Apri in Carica per modificare</button></div>`;
       fillThumbs();
     }
 
@@ -596,10 +608,18 @@
         case "useai": if (s) { s.choice = "ai"; G.reviewed[s.uid] = true; save(); next(); } break;
         case "keeporig": if (s) { s.choice = "local"; G.reviewed[s.uid] = true; save(); next(); } break;
         case "redoai": if (s) redoAi(s); break;
-        case "copy": { const ok = await api.copyText(); $g("gStatus").textContent = ok ? "Testo copiato ✓ Incollalo su Vinted." : "Copia non riuscita: apri in Home e copia da lì."; break; }
+        case "copy": { const ok = await api.copyText(); $g("gStatus").textContent = ok ? "Testo copiato ✓ Incollalo su Vinted." : "Copia non riuscita: apri in Carica e copia da lì."; break; }
         case "savephotos": $g("gStatus").textContent = "Salvo…"; $g("gStatus").textContent = await api.saveAll(); break;
         case "share": $g("gStatus").textContent = await api.shareAll(); break;
         case "tohome": hide(); await clearSession(); api.showTab("home"); api.onClose && api.onClose(); break;
+        case "dropstep": if (s && mains().length > 1) { dropShot(s); save(); render(); } break;
+        case "addstep": addStep(b.dataset.step); save(); render(); break;
+        case "writenow": {
+          b.disabled = true; $g("gStatus").textContent = "Scrivo titolo, descrizione e hashtag…";
+          G.photosOnly = false; G.writing = true; save();
+          const r = await api.writeListing(listingRules(anyAiCoverOf(finalOrder())));
+          G.writing = false; G.textDone = true; G.note = r && r.note || ""; save(); render(); break;
+        }
       }
     }
     function next() {
@@ -612,8 +632,42 @@
       if (G.labelsState === "working") G.labelsState = null;
     }
 
+    // ---------- scaletta modificabile ----------
+    function missingSteps() { if (!G) return []; const have = mains().map(s => s.step); return preset().steps.filter(x => !have.includes(x.id)); }
+    function dropShot(s) { G.shots = G.shots.filter(x => x !== s); ["orig", "raw", "ai", "ai2", "prep"].forEach(k => DB.del(s.uid + ":" + k)); }
+    function addStep(stepId) {
+      if (!G || mains().some(s => s.step === stepId) || !preset().steps.some(x => x.id === stepId)) return;
+      G.shots.push({ uid: uid(), kind: "main", step: stepId, status: "empty", issues: [], framing: null, tilt: null, box: null, ai: "none", aiErr: "", choice: null, proc: "idle", at: 0 });
+      // ordine della scaletta come nel preset
+      const idx = id => preset().steps.findIndex(x => x.id === id);
+      const m = mains().sort((a, b) => idx(a.step) - idx(b.step)), d = details();
+      G.shots = m.concat(d);
+    }
+    /** Imposta gli scatti principali dell'articolo in corso (solo prima dell'elaborazione). */
+    function setSteps(ids) {
+      if (!G || G.stage !== "steps") return false;
+      ids = ids.filter(id => preset().steps.some(x => x.id === id));
+      if (!ids.length) return false;
+      mains().filter(s => !ids.includes(s.step)).forEach(dropShot);
+      ids.forEach(addStep);
+      save(); render(); return true;
+    }
+    /** Riassunto dell'articolo in corso (per Carica e Foto). */
+    function session() {
+      const s = G || load();
+      if (!s || !P.PRESETS[s.preset] || s.stage === "pick") return null;
+      const p = P.PRESETS[s.preset], ms = s.shots.filter(x => x.kind === "main");
+      return { preset: s.preset, name: p.name, tipo: p.tipo, stage: s.stage, photosOnly: !!s.photosOnly,
+        done: ms.filter(x => x.status === "ok").length, total: ms.length, details: s.shots.filter(x => x.kind === "detail" && x.status === "ok").length,
+        steps: p.steps.map(st => { const sh = ms.find(x => x.step === st.id); return { id: st.id, title: st.title, short: st.short, on: !!sh, done: !!(sh && sh.status === "ok") }; }) };
+    }
+    function setPhotosOnly(v) {
+      if (G) { G.photosOnly = !!v; save(); if (root && !root.hidden) render(); return; }
+      const s = load(); if (!s) return;
+      s.photosOnly = !!v; try { localStorage.setItem(STATE_KEY, JSON.stringify(s)); } catch (_) {}
+    }
+
     // ---------- avvio ----------
-    function open() { if (!G) { const saved = load(); if (saved && saved.stage === "ready") { G = saved; } } show(); }
     function init() {
       const saved = load();
       if (saved && saved.stage !== "ready" && saved.stage !== "pick") {
@@ -628,6 +682,13 @@
       return false;
     }
     function newSession() { G = null; show(); }
-    return { open: newSession, resume: open, init, get active() { return !!G; }, hasSaved: () => { const s = load(); return !!(s && s.stage !== "ready" && s.stage !== "pick"); } };
+    async function start(id, opts) { await startPreset(id, opts); show(); }
+    async function cancel() { hide(); await clearSession(); }
+    function resumeSaved() {
+      if (!G) { const saved = load(); if (saved) { G = saved; G.finalizing = false; G.writing = false; if (G.fields) api.setDetails(G.fields, G.fields._auto || []); api.setCategory(preset().cat); if (G.stage !== "ready") resumeWork(); } }
+      show();
+    }
+    return { open: newSession, resume: resumeSaved, start, cancel, session, setSteps, setPhotosOnly, init, get active() { return !!G; },
+      hasSaved: () => { const s = load(); return !!(s && s.stage !== "ready" && s.stage !== "pick"); } };
   };
 })();

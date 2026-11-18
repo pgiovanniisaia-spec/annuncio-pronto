@@ -1,5 +1,7 @@
 name: Compila APK
 
+# Parte a ogni push su QUALSIASI ramo (anche nuova-interfaccia) e a mano da «Run workflow».
+# Le build dei rami diversi da main escono come «pre-release» e non diventano l'ultima versione.
 on:
   push:
   workflow_dispatch:
@@ -72,8 +74,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: ListLab ${{ github.run_number }}
+          name: ListLab ${{ github.run_number }}${{ github.ref_name != 'main' && format(' ({0})', github.ref_name) || '' }}
+          target_commitish: ${{ github.sha }}
           files: ListLab.apk
-          make_latest: true
+          prerelease: ${{ github.ref_name != 'main' }}
+          make_latest: ${{ github.ref_name == 'main' && 'true' || 'false' }}
     permissions:
       contents: write
