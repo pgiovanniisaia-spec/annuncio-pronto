@@ -1,9 +1,9 @@
 // Scheda «Archivio» (la scatola): ogni volta che una copertina AI viene approvata o una descrizione viene scritta,
-// l'articolo si salva da solo qui con la descrizione e SOLO le prime 4 foto (copertina, fronte, retro, indossato),
-// non tutte le altre. Dati: localStorage "ll_archive" + IndexedDB "listlab-archive/photos" (chiavi "<id>:<n>").
+// l'articolo si salva da solo qui con la descrizione così com'è e SOLO le foto fatte con l'AI (scaricabili),
+// non le altre. Dati: localStorage "ll_archive" + IndexedDB "listlab-archive/photos" (chiavi "<id>:<n>").
 (function () {
   "use strict";
-  const KEY = "ll_archive", MAX = 40, PHOTOS = 4;
+  const KEY = "ll_archive", MAX = 40, PHOTOS = 8;
 
   const DB = (() => {
     let p = null;
@@ -36,7 +36,7 @@
   /** Salva (o aggiorna) un articolo: meta = {id, titolo, descrizione, hashtag}, blobs = foto in ordine. */
   async function save(meta, blobs) {
     const pics = (blobs || []).slice(0, PHOTOS);
-    if (!meta || !meta.id || !pics.length) return false;
+    if (!meta || !meta.id || (!pics.length && !meta.descrizione)) return false;
     const list = load(), old = list.find(e => e.id === meta.id);
     for (let i = 0; i < pics.length; i++) await DB.put(meta.id + ":" + i, pics[i]);
     for (let i = pics.length; i < (old ? old.photos || 0 : 0); i++) DB.del(meta.id + ":" + i);
@@ -69,16 +69,39 @@
         const im = document.createElement("img"); im.src = u; im.alt = ""; strip.appendChild(im);
       }
       const t = document.createElement("strong"); t.textContent = e.titolo || "Senza titolo";
-      const d = document.createElement("pre"); d.className = "boxdesc"; d.textContent = e.descrizione || "Descrizione non ancora scritta.";
+      const d = document.createElement("pre"); d.className = "boxdesc"; d.style.maxHeight = "none"; d.textContent = e.descrizione || "Descrizione non ancora scritta.";
       const bar = document.createElement("div"); bar.className = "toolbar";
-      const cp = document.createElement("button"); cp.type = "button"; cp.className = "btn"; cp.textContent = "Copia testo";
-      cp.addEventListener("click", async () => { try { await navigator.clipboard.writeText([e.titolo, e.descrizione, (e.hashtag || []).join(" ")].filter(Boolean).join("\n\n")); cp.textContent = "Copiato ✓"; } catch (_) { cp.textContent = "Non riesco a copiare"; } setTimeout(() => { cp.textContent = "Copia testo"; }, 1800); });
+      const cp = document.createElement("button"); cp.type = "button"; cp.className = "btn"; cp.textContent = "Copia descrizione";
+      cp.addEventListener("click", async () => { try { await navigator.clipboard.writeText(e.descrizione || ""); cp.textContent = "Copiato ✓"; } catch (_) { cp.textContent = "Non riesco a copiare"; } setTimeout(() => { cp.textContent = "Copia descrizione"; }, 1800); });
       const rm = document.createElement("button"); rm.type = "button"; rm.className = "btn danger"; rm.textContent = "Elimina";
       rm.addEventListener("click", () => {
         if (rm.dataset.sure !== "1") { rm.dataset.sure = "1"; rm.textContent = "Tocca di nuovo"; setTimeout(() => { rm.dataset.sure = ""; rm.textContent = "Elimina"; }, 3000); return; }
         drop(e); write(load().filter(x => x.id !== e.id)); render();
       });
-      bar.append(cp, rm); li.append(strip, t, d, bar); box.appendChild(li);
+      const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn primary"; dl.textContent = "Scarica foto AI";
+      dl.hidden = !(e.photos > 0);
+      dl.addEventListener("click", async () => {
+        dl.disabled = true; dl.textContent = "Salvo…";
+        let ok = 0;
+        const G = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GallerySaver;
+        const folder = (e.titolo || "Archivio").replace(/[\\/:*?"<>|]/g, " ").trim().slice(0, 60) || "Archivio";
+        for (let i = 0; i < e.photos; i++) {
+          const b = await DB.get(e.id + ":" + i); if (!b) continue;
+          const name = String(i + 1).padStart(2, "0") + "-ai.jpg";
+          try {
+            if (G) {
+              const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(b); });
+              await G.saveImage({ data, root: (window.APP_NAME || "ListLab"), folder, fileName: name, time: Date.now() + i * 1000 });
+            } else {
+              const u = URL.createObjectURL(b), aEl = document.createElement("a"); aEl.href = u; aEl.download = name; document.body.appendChild(aEl); aEl.click(); aEl.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000);
+            }
+            ok++;
+          } catch (_) {}
+        }
+        dl.textContent = ok ? ok + " foto salvate ✓" : "Non riesco a salvarle"; dl.disabled = false;
+        setTimeout(() => { dl.textContent = "Scarica foto AI"; }, 2500);
+      });
+      bar.append(dl, cp, rm); li.append(strip, t, d, bar); box.appendChild(li);
     }
   }
 

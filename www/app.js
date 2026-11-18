@@ -1166,7 +1166,9 @@ async function archiveNow() {
     try {
       if (!S.archId) S.archId = S.histId || ("a" + Date.now().toString(36));
       const t = S.text || {};
-      await window.LLArchive.save({ id: S.archId, titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag }, await orderedBlobs());
+      const aiItems = S.items.filter(i => i.aiNative && i.edits.has("ai") && !i.el.classList.contains("failed"));
+      const aiBlobs = (await Promise.all(aiItems.map(i => i.outPromise))).filter(Boolean);
+      await window.LLArchive.save({ id: S.archId, titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag }, aiBlobs);
     } catch (_) {}
 }
 // foto finali in Magazzino: si aspetta che la griglia abbia finito di sistemarle (massimo 1 minuto)

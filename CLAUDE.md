@@ -104,3 +104,4 @@ Il workflow mette in `~/.android/debug.keystore` il secret `DEBUG_KEYSTORE_BASE6
 - Impostazioni → AI: «Controllo del regista dopo lo scatto» (`ap_director_check`, spento): se spento, `director-ui.js` salta `D.check` e mostra «Pronta: guardala tu».
 - «Salva articolo» (`finishArticle` in app.js): pulsante in fondo a Carica (`finishHome`) e riquadro «Articolo in corso» in Magazzino (`finishStock`). Aspetta le foto, salva in Magazzino e in Archivio, annulla il servizio guidato e svuota tutto (`clearArticle`). Se la descrizione sta arrivando, chiude appena è pronta (`S.finishAfter`).
 - Misure: visibili per Abbigliamento e Capispalla (non Scarpe); «Avanti» della tastiera passa al campo successivo.
+- Archivio (`archive.js`, scheda `tab-box`): solo le foto fatte con l'AI (`aiNative` + edit "ai") e la descrizione così com'è; pulsanti «Scarica foto AI» (GallerySaver in Pictures/ListLab/<titolo>), «Copia descrizione», «Elimina».
