@@ -295,7 +295,7 @@ function updateDescNow() {
   h.textContent = !n ? "Nessuna foto in Carica: aggiungi o riapri un articolo." : S.text ? `${n} foto · descrizione già scritta: puoi riscriverla col modello aggiornato.` : `${n} foto in Carica, descrizione ancora da scrivere.`;
 }
 section("misure", () => {
-  const ids = Object.values(MEASURES);
+  const ids = ["mShoulders", "mPit", "mLength", "mSleeve"];   // MEASURES è definito più sotto
   ids.forEach((id, i) => $(id).addEventListener("keydown", e => {
     if (e.key !== "Enter") return; e.preventDefault();
     if (ids[i + 1]) $(ids[i + 1]).focus(); else $(id).blur();
