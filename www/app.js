@@ -137,6 +137,15 @@ section("schede", () => {
   });
 });
 
+section("descrizione", () => {
+  const ta = $("descTemplate"), st = $("descStatus");
+  if (!ta) return;
+  ta.value = store.get("ll_desc_template", "");
+  const say = t => { st.textContent = t; st.classList.remove("flash"); void st.offsetWidth; st.classList.add("flash"); };
+  $("descSave").addEventListener("click", () => { store.set("ll_desc_template", ta.value.trim()); say(ta.value.trim() ? "Modello salvato ✓" : "Modello vuoto: userò lo stile standard."); });
+  $("descReset").addEventListener("click", () => { ta.value = ""; store.set("ll_desc_template", ""); say("Modello svuotato."); });
+});
+
 section("dettagli", () => {
 const sizeHints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
 seg("cat", v => setCategory(v));
@@ -759,7 +768,7 @@ Regole:
 - controlli: cose da verificare prima di pubblicare (possibili macchie o segni visti in foto, marca non leggibile). Lista vuota se nulla.
 - box: per OGNI foto, nell'ordine, il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
 
-${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}`;
+${store.get("ll_desc_template", "").trim() ? "\nMODELLO DI DESCRIZIONE DEL VENDITORE (seguilo per struttura e stile nel campo descrizione; sostituisci {marca}, {taglia}, {materiale}, {condizioni}, {misure} con i dati reali e togli le righe di cui non hai il dato, senza inventare):\n" + store.get("ll_desc_template", "").trim() + "\n" : ""}${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}`;
 }
 
 function aiImage(it) {
