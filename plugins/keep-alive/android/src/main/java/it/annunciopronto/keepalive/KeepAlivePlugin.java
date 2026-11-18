@@ -27,13 +27,8 @@ public class KeepAlivePlugin extends Plugin {
     }
 
     @PluginMethod public void start(PluginCall call) {
-        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notify") != PermissionState.GRANTED) {
-            requestPermissionForAlias("notify", call, "afterPerm");   // senza permesso parte comunque, solo senza notifica visibile
-            return;
-        }
-        run(call);
+        run(call);   // parte sempre: senza permesso notifiche il servizio funziona lo stesso (notifica nascosta)
     }
-    @com.getcapacitor.annotation.PermissionCallback private void afterPerm(PluginCall call) { run(call); }
 
     private void run(PluginCall call) {
         Intent i = new Intent(getContext(), KeepAliveService.class);

@@ -27,6 +27,19 @@
     return orig(input, init).finally(end);
   };
 
+  // permesso notifiche chiesto subito, con l'app aperta (in sottofondo Android non può mostrare la richiesta)
+  setTimeout(() => { const p = P(); if (p && p.requestPermissions) p.requestPermissions().catch(() => {}); }, 2500);
+
+  /** Aspetta che l'app torni aperta e la rete ci sia (per riprovare dopo una connessione interrotta). */
+  function whenBack() {
+    return new Promise(res => {
+      const ok = () => !document.hidden && navigator.onLine !== false;
+      if (ok()) return setTimeout(res, 1500);
+      const h = () => { if (ok()) { document.removeEventListener("visibilitychange", h); window.removeEventListener("online", h); setTimeout(res, 1500); } };
+      document.addEventListener("visibilitychange", h); window.addEventListener("online", h);
+    });
+  }
+
   // per lavori lunghi senza rete (es. elaborazione foto): LLKeep.run(promessa)
-  window.LLKeep = { begin, end, setLabel(t) { label = t || ""; }, run(p) { begin(); return Promise.resolve(p).finally(end); }, get busy() { return n > 0; } };
+  window.LLKeep = { begin, end, whenBack, setLabel(t) { label = t || ""; }, run(p) { begin(); return Promise.resolve(p).finally(end); }, get busy() { return n > 0; } };
 })();

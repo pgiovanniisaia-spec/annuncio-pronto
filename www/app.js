@@ -1369,9 +1369,25 @@ function moveToFront(it) {
 // L'articolo entra subito nella scatola «in lavorazione»; quando la foto arriva va in Archivio e, se l'articolo
 // è ancora aperto in Carica, diventa la copertina (badge AI). Intanto si può caricare l'articolo successivo.
 let coverJobs = 0;
+const coverRetry = new Map();   // id scatola → rilancia la copertina non riuscita
+window.LLCoverRetry = id => { const f = coverRetry.get(id); if (!f) return false; coverRetry.delete(id); f(); return true; };
 const coverWaiters = [];
 async function coverSlot() { if (coverJobs < 2) { coverJobs++; return; } await new Promise(r => coverWaiters.push(r)); coverJobs++; }
 function coverFree() { coverJobs--; const n = coverWaiters.shift(); if (n) n(); }
+// connessione interrotta (app in sottofondo, rete persa): si riprova lo stesso passo quando l'app torna aperta, fino a 3 volte
+const NET_ERR = /connection abort|connessione|network|failed to fetch|timeout|timed out|socket|reset|unreachable|offline|abort/i;
+async function retryNet(fn, onStep, label) {
+  for (let i = 0; ; i++) {
+    try { return await fn(); }
+    catch (e) {
+      const msg = String((e && e.message) || e);
+      if (i >= 3 || !(NET_ERR.test(msg) || (e && e.code === "offline"))) throw e;
+      onStep && onStep("Connessione interrotta: riprendo " + label + " appena l'app è aperta…");
+      if (window.LLKeep) await window.LLKeep.whenBack(); else await new Promise(r => setTimeout(r, 3000));
+      onStep && onStep("Riprendo " + label + "…");
+    }
+  }
+}
 async function directorAuto(job, onStep) {
   if (!director) throw new Error("Il regista non è disponibile su questo telefono.");
   if (!apiKey) throw new Error("Per il regista serve la chiave Claude: aggiungila in Impostazioni.");
@@ -1380,17 +1396,17 @@ async function directorAuto(job, onStep) {
   const costs = { claude: 0, openai: 0 };
   const lavoro = LAVORI[job.kind || "cover"];
   onStep && onStep("Il regista studia il capo…");
-  const b = await director.brief({ original: job.original, reference, lavoro, info: job.info || knownInfo() });
+  const b = await retryNet(() => director.brief({ original: job.original, reference, lavoro, info: job.info || knownInfo() }), onStep, "il regista");
   costs.claude += b.cost;
   const prompt = (b.brief.prompt_fotografo || "").trim();
   if (!prompt) throw new Error("Il regista non ha preparato le istruzioni. Riprova.");
   onStep && onStep("Il fotografo scatta…");
-  const s = await director.shoot({ original: job.original, reference, prompt });
+  const s = await retryNet(() => director.shoot({ original: job.original, reference, prompt }), onStep, "lo scatto");
   costs.openai += s.cost;
   let report = { approvata: true, voto: "–", controlli: [], problemi: [], prompt_corretto: "", skipped: true };
   if (directorCheck) {
     onStep && onStep("Il regista controlla la foto…");
-    const c = await director.check({ original: job.original, result: s.blob, prompt, brief: b.brief, lavoro });
+    const c = await retryNet(() => director.check({ original: job.original, result: s.blob, prompt, brief: b.brief, lavoro }), onStep, "il controllo");
     costs.claude += c.cost; report = c.report;
   }
   return { choice: "ai", blob: s.blob, brief: b.brief, report, prompt, shots: [{ prompt, approvata: report.approvata, voto: report.voto }], costs };
@@ -1405,8 +1421,9 @@ async function createCover(it, useRef) {
   const info = knownInfo();
   const original = await originalBlob(it);
   if (A) { A.touch(artId, { titolo, descrizione: t.descrizione || "", hashtag: t.hashtag || [], status: "working", step: "In coda…" }); A.play(); }
-  (async () => {
+  const job = async () => {
     await coverSlot();
+    if (window.LLKeep) window.LLKeep.begin();
     try {
       const r = await directorAuto({ original, kind: "cover", useRef, info }, step => A && A.touch(artId, { step }));
       if (A) { await A.addCover(artId, r.blob); A.touch(artId, { status: "ready", step: "" }); }
@@ -1419,9 +1436,11 @@ async function createCover(it, useRef) {
       appToast("Copertina pronta nella scatola ✓ (" + costLine(r.costs) + ")");
     } catch (e) {
       if (A) A.touch(artId, { status: "error", step: (e && e.message) || "errore" });
+      coverRetry.set(artId, () => { A && A.touch(artId, { status: "working", step: "In coda…" }); job(); });
       appToast("Copertina non riuscita: " + ((e && e.message) || "errore"));
-    } finally { coverFree(); }
-  })();
+    } finally { coverFree(); if (window.LLKeep) window.LLKeep.end(); }
+  };
+  job();
   return "Copertina in lavorazione nella scatola ⏳ Puoi continuare o passare al prossimo articolo: quando è pronta la trovi in Archivio (e qui, se l'articolo è ancora aperto).";
 }
 

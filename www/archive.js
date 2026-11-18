@@ -93,6 +93,13 @@
         const w = document.createElement("div"); w.className = "boxwork" + (e.status === "error" ? " err" : "");
         w.textContent = e.status === "error" ? "Copertina non riuscita: " + (e.step || "errore") : "⏳ " + (e.step || "Copertina in lavorazione…");
         li.appendChild(w);
+        if (e.status === "error") {
+          const rb = document.createElement("button"); rb.type = "button"; rb.className = "btn primary"; rb.textContent = "Riprova la copertina";
+          rb.addEventListener("click", () => {
+            if (!(window.LLCoverRetry && window.LLCoverRetry(e.id))) { rb.textContent = "Riaprila da Carica e tocca «Crea copertina»"; rb.disabled = true; }
+          });
+          li.appendChild(rb);
+        }
       }
       const d = document.createElement("pre"); d.className = "boxdesc"; d.style.maxHeight = "none"; d.textContent = e.descrizione || "Descrizione non ancora scritta.";
       const bar = document.createElement("div"); bar.className = "toolbar";
