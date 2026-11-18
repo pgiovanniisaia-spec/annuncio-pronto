@@ -1365,14 +1365,64 @@ function moveToFront(it) {
   S.items.forEach(x => $("grid").append(x.el));
   refresh();
 }
+// Copertina in SOTTOFONDO: regista (Claude) → 1 scatto (OpenAI) [→ controllo se acceso], senza bloccare lo schermo.
+// L'articolo entra subito nella scatola «in lavorazione»; quando la foto arriva va in Archivio e, se l'articolo
+// è ancora aperto in Carica, diventa la copertina (badge AI). Intanto si può caricare l'articolo successivo.
+let coverJobs = 0;
+const coverWaiters = [];
+async function coverSlot() { if (coverJobs < 2) { coverJobs++; return; } await new Promise(r => coverWaiters.push(r)); coverJobs++; }
+function coverFree() { coverJobs--; const n = coverWaiters.shift(); if (n) n(); }
+async function directorAuto(job, onStep) {
+  if (!director) throw new Error("Il regista non è disponibile su questo telefono.");
+  if (!apiKey) throw new Error("Per il regista serve la chiave Claude: aggiungila in Impostazioni.");
+  if (!openaiKey) throw new Error("Per il fotografo serve la chiave OpenAI: aggiungila in Impostazioni.");
+  const reference = job.useRef ? await window.LLStyleRef.get() : null;
+  const costs = { claude: 0, openai: 0 };
+  const lavoro = LAVORI[job.kind || "cover"];
+  onStep && onStep("Il regista studia il capo…");
+  const b = await director.brief({ original: job.original, reference, lavoro, info: job.info || knownInfo() });
+  costs.claude += b.cost;
+  const prompt = (b.brief.prompt_fotografo || "").trim();
+  if (!prompt) throw new Error("Il regista non ha preparato le istruzioni. Riprova.");
+  onStep && onStep("Il fotografo scatta…");
+  const s = await director.shoot({ original: job.original, reference, prompt });
+  costs.openai += s.cost;
+  let report = { approvata: true, voto: "–", controlli: [], problemi: [], prompt_corretto: "", skipped: true };
+  if (directorCheck) {
+    onStep && onStep("Il regista controlla la foto…");
+    const c = await director.check({ original: job.original, result: s.blob, prompt, brief: b.brief, lavoro });
+    costs.claude += c.cost; report = c.report;
+  }
+  return { choice: "ai", blob: s.blob, brief: b.brief, report, prompt, shots: [{ prompt, approvata: report.approvata, voto: report.voto }], costs };
+}
 async function createCover(it, useRef) {
-  const r = await directorRun({ original: await originalBlob(it), kind: "cover", title: "Copertina con AI", useRef });
-  if (!r || !r.choice) return r && r.costs && r.costs.claude ? `Annullato: nessuno scatto (regista ${costLine(r.costs)}).` : "Annullato: nessuno scatto, nessun costo OpenAI.";
-  if (r.choice === "orig") return `Tenuta la foto originale. Costo: ${costLine(r.costs)}.`;
-  await useAiImage(it, r.blob);
-  it.director = record(r);
-  moveToFront(it);
-  return `Copertina pronta in Carica (badge ✦ AI), ${r.shots.length} ${r.shots.length === 1 ? "scatto" : "scatti"}. Costo reale: ${costLine(r.costs)}.`;
+  if (!apiKey) return "Per il regista serve la chiave Claude: aggiungila in Impostazioni.";
+  if (!openaiKey) return "Per il fotografo serve la chiave OpenAI: aggiungila in Impostazioni.";
+  if (!S.archId) S.archId = S.histId || ("a" + Date.now().toString(36));
+  const artId = S.archId, A = window.LLArchive;
+  const t = S.text || {}, d = getDetails();
+  const titolo = t.titolo || [S.guidedTipo || "Articolo", d.brand, d.size && "taglia " + d.size].filter(Boolean).join(" ");
+  const info = knownInfo();
+  const original = await originalBlob(it);
+  if (A) { A.touch(artId, { titolo, descrizione: t.descrizione || "", hashtag: t.hashtag || [], status: "working", step: "In coda…" }); A.play(); }
+  (async () => {
+    await coverSlot();
+    try {
+      const r = await directorAuto({ original, kind: "cover", useRef, info }, step => A && A.touch(artId, { step }));
+      if (A) { await A.addCover(artId, r.blob); A.touch(artId, { status: "ready", step: "" }); }
+      if (S.archId === artId && S.items.includes(it)) {      // l'articolo è ancora aperto: diventa la copertina
+        await useAiImage(it, r.blob);
+        it.director = record(r);
+        moveToFront(it);
+        if (r.brief) applyAnalysis(r.brief.analisi);
+      }
+      appToast("Copertina pronta nella scatola ✓ (" + costLine(r.costs) + ")");
+    } catch (e) {
+      if (A) A.touch(artId, { status: "error", step: (e && e.message) || "errore" });
+      appToast("Copertina non riuscita: " + ((e && e.message) || "errore"));
+    } finally { coverFree(); }
+  })();
+  return "Copertina in lavorazione nella scatola ⏳ Puoi continuare o passare al prossimo articolo: quando è pronta la trovi in Archivio (e qui, se l'articolo è ancora aperto).";
 }
 
 // ---------- alternativa gratuita: app ChatGPT ----------
@@ -1552,7 +1602,8 @@ section("servizio guidato", () => {
     S: () => window.LLClaude.S,
     // regista + fotografo per copertina, fronte e retro: { choice, blob, record }
     async directorRun(o) {
-      const r = await directorRun({ original: await window.AIImages.fullQuality(o.raw, 0), kind: o.kind, title: o.title, useRef: o.useRef });
+      const r = await directorAuto({ original: await window.AIImages.fullQuality(o.raw, 0), kind: o.kind, useRef: o.useRef });
+      if (r && r.brief) applyAnalysis(r.brief.analisi);
       return { choice: r && r.choice, blob: r && r.blob, record: r && r.choice === "ai" ? record(r) : null, costs: r && r.costs };
     },
     styleRef: () => window.LLStyleRef.get(),

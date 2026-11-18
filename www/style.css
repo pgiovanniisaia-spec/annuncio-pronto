@@ -565,3 +565,6 @@ html.director-open{overflow:hidden}
 
 .btn.finish{width:100%;margin-top:10px;font-weight:600}
 #curCard{border:2px solid var(--accent)}
+
+.boxwork{font-size:14px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb, var(--accent) 12%, transparent)}
+.boxwork.err{background:#f6e3e0;color:#7a2a20}

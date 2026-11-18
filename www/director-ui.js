@@ -39,8 +39,11 @@
     }
     const $d = id => document.getElementById(id);
 
+    let runSeq = 0;
     function run(job) {
       ensure();
+      const myRun = ++runSeq;            // le risposte di una sessione chiusa non toccano più lo schermo
+      const alive = () => myRun === runSeq;
       const st = { stage: "brief", brief: null, prompt: "", report: null, result: null, shots: [], costs: { claude: 0, openai: 0, est: false }, error: "", correcting: false, retry: false };
       const urls = [];
       const url = b => { const u = URL.createObjectURL(b); urls.push(u); return u; };
@@ -68,6 +71,7 @@
           }).join("");
         }
         function render() {
+          if (!alive()) return;
           timeline();
           const B = $d("dBody"), F = $d("dFoot");
           if (st.error) {
@@ -160,6 +164,7 @@
           st.stage = "brief"; st.error = ""; render();
           try {
             const r = await D.brief({ original: job.original, reference: job.reference, lavoro: job.lavoro, info: job.info, previous: correction ? st.brief : null, correction });
+            if (!alive()) return;
             st.costs.claude += r.cost; st.brief = r.brief; st.prompt = r.brief.prompt_fotografo;
             st.stage = "synth"; st.correcting = false; render();
             if (!opts.confirm()) {   // conferma disattivata in Impostazioni: la sintesi è solo una notifica
@@ -169,6 +174,8 @@
           } catch (e) { fail(e, "brief", () => doBrief(correction)); }
         }
         async function doShoot(prompt) {
+          if (!alive()) return;
+          if (!prompt || !prompt.trim()) return doBrief("");   // niente prompt: il regista lo rifà, mai uno scatto vuoto
           st.stage = "shoot"; st.error = ""; st.prompt = prompt; render();
           try {
             const r = await D.shoot({ original: job.original, reference: job.reference, prompt });
@@ -193,7 +200,7 @@
         }
 
         root.onclick = e => {
-          const b = e.target.closest("[data-d]"); if (!b || b.disabled) return;
+          const b = e.target.closest("[data-d]"); if (!b || b.disabled || !alive()) return;
           const a = b.dataset.d;
           if (a === "close") return finish(null);
           if (a === "again" && st.failed) return st.failed();

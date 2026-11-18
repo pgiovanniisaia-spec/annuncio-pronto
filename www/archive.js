@@ -36,8 +36,10 @@
   /** Salva (o aggiorna) un articolo: meta = {id, titolo, descrizione, hashtag}, blobs = foto in ordine. */
   async function save(meta, blobs) {
     const pics = (blobs || []).slice(0, PHOTOS);
-    if (!meta || !meta.id || (!pics.length && !meta.descrizione)) return false;
+    if (!meta || !meta.id) return false;
     const list = load(), old = list.find(e => e.id === meta.id);
+    if (!pics.length && !meta.descrizione && !old) return false;
+    if (!pics.length && old && old.photos) return false;   // foto AI già in scatola (es. copertina fatta in sottofondo): non svuotare
     for (let i = 0; i < pics.length; i++) await DB.put(meta.id + ":" + i, pics[i]);
     for (let i = pics.length; i < (old ? old.photos || 0 : 0); i++) DB.del(meta.id + ":" + i);
     const e = Object.assign({}, old || {}, { id: meta.id, date: Date.now(), titolo: meta.titolo || (old && old.titolo) || "", descrizione: meta.descrizione || (old && old.descrizione) || "",
@@ -46,6 +48,24 @@
     play();
     if (!$("tab-box").hidden) render();
     return true;
+  }
+  /** Crea o aggiorna i dati di un articolo senza toccare le foto (status: working / ready / error, step = cosa sta facendo). */
+  function touch(id, fields) {
+    const list = load(); let e = list.find(x => x.id === id);
+    if (!e) { e = { id, date: Date.now(), titolo: "", descrizione: "", hashtag: [], photos: 0 }; list.unshift(e); }
+    Object.assign(e, fields); write(list);
+    if (!$("tab-box").hidden) render();
+  }
+  /** Mette una foto AI in prima posizione (copertina) nell'articolo. */
+  async function addCover(id, blob) {
+    const list = load(), e = list.find(x => x.id === id); if (!e || !blob) return;
+    const old = [];
+    for (let i = 0; i < (e.photos || 0); i++) { const b = await DB.get(id + ":" + i); if (b) old.push(b); }
+    const all = [blob].concat(old).slice(0, PHOTOS);
+    for (let i = 0; i < all.length; i++) await DB.put(id + ":" + i, all[i]);
+    e.photos = all.length; write(list);
+    play();
+    if (!$("tab-box").hidden) render();
   }
   /** Aggiorna solo il testo di un articolo già in archivio (modifiche a mano). */
   function patch(id, fields) {
@@ -68,7 +88,12 @@
         const u = URL.createObjectURL(b); urls.push(u);
         const im = document.createElement("img"); im.src = u; im.alt = ""; strip.appendChild(im);
       }
-      const t = document.createElement("strong"); t.textContent = e.titolo || "Senza titolo";
+      const t = document.createElement("strong"); t.textContent = e.titolo || "Articolo del " + new Date(e.date).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+      if (e.status === "working" || e.status === "error") {
+        const w = document.createElement("div"); w.className = "boxwork" + (e.status === "error" ? " err" : "");
+        w.textContent = e.status === "error" ? "Copertina non riuscita: " + (e.step || "errore") : "⏳ " + (e.step || "Copertina in lavorazione…");
+        li.appendChild(w);
+      }
       const d = document.createElement("pre"); d.className = "boxdesc"; d.style.maxHeight = "none"; d.textContent = e.descrizione || "Descrizione non ancora scritta.";
       const bar = document.createElement("div"); bar.className = "toolbar";
       const cp = document.createElement("button"); cp.type = "button"; cp.className = "btn"; cp.textContent = "Copia descrizione";
@@ -105,5 +130,5 @@
     }
   }
 
-  window.LLArchive = { save, patch, render, play, has: id => load().some(e => e.id === id) };
+  window.LLArchive = { save, patch, touch, addCover, get: id => load().find(e => e.id === id) || null, render, play, has: id => load().some(e => e.id === id) };
 })();
