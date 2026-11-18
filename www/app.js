@@ -286,12 +286,15 @@ function renderDescPreview() {
   pv.textContent = fillTemplate(tpl, any ? real : sample);
 }
 function updateDescNow() {
-  const n = S.items.length, h = $("descNowHint"), b = $("descWrite");
+  const n = S.items.length, h = $("descNowHint");
   if (!h) return;
-  b.disabled = !n || S.writing;
   h.textContent = !n ? "Nessuna foto in Carica: aggiungi o riapri un articolo." : S.text ? `${n} foto · descrizione già scritta: puoi riscriverla col modello aggiornato.` : `${n} foto in Carica, descrizione ancora da scrivere.`;
-  b.textContent = S.text ? "Riscrivi la descrizione" : "Scrivi la descrizione ora";
 }
+section("flusso", () => {
+  $("readyBtn").addEventListener("click", () => { if (S.items.length) showTab("ai"); });
+  $("toDesc").addEventListener("click", () => showTab("desc"));
+});
+
 section("descrizione", () => {
   const ta = $("descTemplate"), st = $("descStatus");
   ta.value = store.get(DESC_KEY, "");
@@ -318,7 +321,6 @@ section("descrizione", () => {
     b.dataset.sure = ""; b.textContent = "Svuota";
     ta.value = ""; persist(); say("Modello svuotato: userò lo stile standard.");
   });
-  $("descWrite").addEventListener("click", () => { if (!S.items.length) return; showTab("home"); $("go").onclick(); });
   persist();
 });
 
@@ -330,7 +332,7 @@ seg("fmt", v => { S.fmt = v; $("grid").classList.toggle("square", v === "11"); r
 $("whiten").addEventListener("change", rerenderAll);
 });
 
-function setStatus(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); }
+function setStatus(msg, err) { ["status", "status2"].forEach(id => { const s = $(id); if (s) { s.textContent = msg; s.classList.toggle("err", !!err); } }); }
 
 function setCategory(v) {
   S.cat = v; segSet("cat", v);
@@ -801,12 +803,12 @@ function refresh() {
   const c = $("count"); const txt = `${n} / ${MAX}`;
   if (c.textContent !== txt) { c.textContent = txt; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
   $("photoTools").hidden = !ready;
-  $("go").disabled = !n || S.writing;
+  $("go").disabled = !n || S.writing; $("readyBtn").disabled = !n;
   $("saveStock").disabled = !n || ready < n;
   if (studio) studio.sync();
   updateDescNow();
   if (!S.writing && !$("status").classList.contains("err")) {
-    setStatus(!n ? "Aggiungi almeno una foto per iniziare." : ready < n ? `Sistemo le foto… ${ready} di ${n}` : `${n} ${n === 1 ? "foto pronta" : "foto pronte"}. ${mode() === "photos" ? "Salvale in Magazzino o condividile." : "Ora puoi scrivere l'annuncio."}`);
+    setStatus(!n ? "Aggiungi almeno una foto per iniziare." : ready < n ? `Sistemo le foto… ${ready} di ${n}` : `${n} ${n === 1 ? "foto pronta" : "foto pronte"}. ${mode() === "photos" ? "Salvale in Magazzino o condividile." : "Tocca «Pronto» per passare alle foto."}`);
   }
 }
 
@@ -926,6 +928,7 @@ function browserDownload(blobs) { blobs.forEach((b, i) => downloadBlob(b, fname(
 
 // ---------- testo con Claude ----------
 function buildPrompt(n) {
+  const TPL = store.get("ll_desc_template", "").trim();
   const brand = $("brand").value.trim(), size = $("size").value.trim(), notes = $("notes").value.trim();
   const material = $("material").value.trim(), mis = S.cat === "Capispalla" ? measuresText() : "";
   return `Sei un venditore esperto su Vinted Italia. Ti mostro ${n} foto dello STESSO articolo usato da vendere.
@@ -941,12 +944,12 @@ Tono: ${S.tone === "amichevole" ? "amichevole e caldo, come una persona reale, s
 Regole:
 - Scrivi in italiano. Non inventare marca, materiale o misure: usali solo se indicati dal venditore o chiaramente leggibili in foto (logo, etichetta). Se un dettaglio non è certo, non scriverlo.
 - titolo: massimo 60 caratteri, con tipo di capo, colore, marca (se nota) e taglia (se nota). Niente emoji, niente maiuscolo.
-- descrizione: 4-8 righe. Prima cosa è, colore, stile e dettagli visibili; poi una riga "Taglia: ..." e una riga "Condizioni: ..." se note; includi i difetti indicati nelle note; chiudi con una frase cortese su spedizione o domande. Niente segnaposto tra parentesi.
+${TPL ? "- descrizione: usa ESATTAMENTE il MODELLO DEL VENDITORE riportato più sotto. Copia il modello riga per riga, con le stesse righe, lo stesso ordine, le stesse parole fisse, le stesse emoji e gli stessi a-capo, e completa solo le parti da riempire (segnaposto tra graffe e voci come Colore, Composizione, Misure) con i dati dell'articolo o con quello che vedi in foto. Se un dato non è noto, togli quella riga. NON aggiungere introduzioni, frasi tue o righe vuote in più. Il tono richiesto qui sopra vale solo per titolo e controlli." : "descrizione: 4-8 righe. Prima cosa è, colore, stile e dettagli visibili; poi una riga \"Taglia: ...\" e una riga \"Condizioni: ...\" se note; includi i difetti indicati nelle note; chiudi con una frase cortese su spedizione o domande. Niente segnaposto tra parentesi."}
 - hashtag: da 4 a 6, minuscoli, senza spazi, pertinenti.
 - controlli: cose da verificare prima di pubblicare (possibili macchie o segni visti in foto, marca non leggibile). Lista vuota se nulla.
 - box: per OGNI foto, nell'ordine, il riquadro che contiene l'intero articolo (per le scarpe tutto il paio visibile) come [x0,y0,x1,y1] con valori da 0 a 1 (0,0 in alto a sinistra). Se l'articolo riempie già la foto usa [0,0,1,1].
 
-${store.get("ll_desc_template", "").trim() ? "\nMODELLO DI DESCRIZIONE DEL VENDITORE (seguilo per struttura e stile nel campo descrizione; sostituisci {marca}, {taglia}, {materiale}, {condizioni}, {misure} con i dati reali e togli le righe di cui non hai il dato, senza inventare):\n" + store.get("ll_desc_template", "").trim() + "\n" : ""}${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}`;
+${store.get("ll_desc_template", "").trim() ? "\nMODELLO DI DESCRIZIONE DEL VENDITORE (da copiare riga per riga nel campo descrizione; sostituisci {marca}, {taglia}, {materiale}, {condizioni}, {misure} con i dati reali; togli le righe di cui non hai il dato, senza inventare):\n" + store.get("ll_desc_template", "").trim() + "\n" : ""}${S.directorAnalysis ? "\nAnalisi del capo fatta dal regista (usala per la descrizione, senza inventare): " + JSON.stringify(S.directorAnalysis) + "\n" : ""}${S.guidedRules ? "\nRegole aggiuntive (servizio guidato):\n" + S.guidedRules + "\n" : ""}`;
 }
 
 function aiImage(it) {
@@ -964,7 +967,7 @@ const BOX = () => T.arr(T.arr(T.num(""), "[x0,y0,x1,y1] da 0 a 1, 0,0 in alto a 
 const LISTING_TOOL = () => ({
   name: "consegna_annuncio", description: "Consegna l'annuncio Vinted: titolo, descrizione, hashtag, controlli e riquadri.",
   input_schema: T.obj({
-    titolo: T.str("massimo 60 caratteri"), descrizione: T.str("4-8 righe"), hashtag: T.arr(T.str(""), "da 4 a 6, minuscoli, con #"),
+    titolo: T.str("massimo 60 caratteri"), descrizione: T.str(store.get("ll_desc_template", "").trim() ? "il modello del venditore, copiato riga per riga e completato" : "4-8 righe"), hashtag: T.arr(T.str(""), "da 4 a 6, minuscoli, con #"),
     controlli: T.arr(T.str(""), "cose da verificare prima di pubblicare; vuota se nulla"), box: BOX()
   })
 });

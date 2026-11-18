@@ -88,6 +88,7 @@
     <button class="go" type="button" id="aiCover">Crea copertina</button>
     <span class="hint" id="aiCoverHint">Usa la foto selezionata nella striscia (o la prima della griglia).</span>
   </section>
+  <button class="go" id="toDesc" type="button">Avanti: scrivi la descrizione</button>
 </main>
 
 <!-- ============ CARICA (ex Home) ============ -->
@@ -187,13 +188,6 @@
     </div>
     <div class="row">
       <div class="field">
-        <span class="label">Tono</span>
-        <div class="seg" id="tone">
-          <button type="button" data-v="amichevole" aria-pressed="true">Amichevole</button>
-          <button type="button" data-v="essenziale" aria-pressed="false">Essenziale</button>
-        </div>
-      </div>
-      <div class="field">
         <span class="label">Formato foto</span>
         <div class="seg" id="fmt">
           <button type="button" data-v="34" aria-pressed="true">Verticale 3:4</button>
@@ -204,15 +198,11 @@
     <label class="toggle"><input type="checkbox" id="whiten" checked> Schiarisci lo sfondo chiaro</label>
   </section>
 
-  <button class="go" id="go" type="button" disabled>Scrivi l'annuncio</button>
   <button class="go" id="saveStock" type="button" disabled hidden>Salva in Magazzino</button>
   <div class="status" id="status" role="status">Aggiungi almeno una foto per iniziare.</div>
+  <button class="go" id="readyBtn" type="button" disabled>Pronto: passa alle foto</button>
 
-  <section class="label-card" id="resText" hidden>
-    <div class="out" id="out"></div>
-  </section>
 
-  <button class="btn" id="reset" type="button" hidden>+ Nuovo articolo</button>
 </main>
 
 <!-- ============ DESCRIZIONE ============ -->
@@ -255,9 +245,21 @@
     <pre class="desc-preview" id="descPreview"></pre>
   </section>
   <section class="panel">
-    <div class="step"><h2>Articolo in corso</h2></div>
+    <div class="step"><h2>Annuncio</h2></div>
     <span class="hint" id="descNowHint">Nessuna foto in Carica.</span>
-    <button class="go" type="button" id="descWrite" disabled>Scrivi la descrizione ora</button>
+    <div class="field">
+      <span class="label">Tono</span>
+      <div class="seg" id="tone">
+        <button type="button" data-v="amichevole" aria-pressed="true">Amichevole</button>
+        <button type="button" data-v="essenziale" aria-pressed="false">Essenziale</button>
+      </div>
+    </div>
+    <button class="go" id="go" type="button" disabled>Scrivi l'annuncio</button>
+    <div class="status" id="status2" role="status"></div>
+    <section class="label-card" id="resText" hidden>
+      <div class="out" id="out"></div>
+    </section>
+  <button class="btn" id="reset" type="button" hidden>+ Nuovo articolo</button>
   </section>
 </main>
 

@@ -93,3 +93,8 @@ Il workflow mette in `~/.android/debug.keystore` il secret `DEBUG_KEYSTORE_BASE6
 ## Idee per i prossimi passi (se l'utente le chiede)
 - Rimozione completa dello sfondo sul telefono (modello di segmentazione, es. MediaPipe o ONNX Runtime Web incluso nell'app).
 - APK firmato per release (`assembleRelease` con keystore) o pubblicazione sul Play Store.
+
+## Flusso a tre passi (ramo nuova-interfaccia)
+- Carica: solo foto e dati dell'articolo, poi il pulsante «Pronto» porta a Foto. Qui NON si scrive più l'annuncio.
+- Foto: scaletta e copertina; in fondo «Avanti: scrivi la descrizione».
+- Descrizione: modello del venditore, tono, pulsante `go` («Scrivi l'annuncio») e risultato (`resText`). Se c'è il modello (`ll_desc_template`), `buildPrompt` impone a Claude di copiarlo riga per riga; senza modello vale lo stile standard.
