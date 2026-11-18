@@ -146,6 +146,29 @@ section("descrizione", () => {
   $("descReset").addEventListener("click", () => { ta.value = ""; store.set("ll_desc_template", ""); say("Modello svuotato."); });
 });
 
+section("scaletta", () => {
+  const box = $("stepsList"), L = window.LL_STEPS, P = window.LL_PRESETS && window.LL_PRESETS.PRESETS;
+  if (!box || !L || !P) return;
+  const id = "cappotto";
+  function draw() {
+    const off = L.off(id);
+    box.innerHTML = "";
+    P[id].steps.forEach(st => {
+      const lab = document.createElement("label"); lab.className = "toggle";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !off.includes(st.id);
+      cb.addEventListener("change", () => {
+        let cur = L.off(id);
+        cur = cb.checked ? cur.filter(x => x !== st.id) : cur.concat(st.id);
+        if (P[id].steps.every(x => cur.includes(x.id))) { cur = cur.filter(x => x !== st.id); cb.checked = true; }
+        L.setOff(id, cur);
+      });
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(" " + st.title));
+      box.appendChild(lab);
+    });
+  }
+  draw();
+});
+
 section("dettagli", () => {
 const sizeHints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
 seg("cat", v => setCategory(v));

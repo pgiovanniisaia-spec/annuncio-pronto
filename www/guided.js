@@ -183,7 +183,7 @@
       await clearSession();
       const p = P.PRESETS[id];
       G = { v: 1, preset: id, stage: "steps", mode: api.keys().openai ? "ai" : "local", shots: [], labels: null, fields: null, reviewed: {}, detailPick: null, startedAt: Date.now() };
-      p.steps.forEach(st => G.shots.push({ uid: uid(), kind: "main", step: st.id, status: "empty", issues: [], framing: null, tilt: null, box: null, ai: "none", aiErr: "", choice: null, proc: "idle", at: 0 }));
+      (window.LL_STEPS ? window.LL_STEPS.active(id) : p.steps).forEach(st => G.shots.push({ uid: uid(), kind: "main", step: st.id, status: "empty", issues: [], framing: null, tilt: null, box: null, ai: "none", aiErr: "", choice: null, proc: "idle", at: 0 }));
       api.setCategory(p.cat);
       save(); render();
     }
@@ -336,14 +336,14 @@
           })
         }, x => typeof x.tagliato === "boolean" ? "" : 'il campo "tagliato" manca');
         const box = Array.isArray(r.box) && r.box.length === 4 ? r.box.map(Number) : null;
-        const touches = box && (box[0] < 0.005 || box[1] < 0.005 || box[2] > 0.995 || box[3] > 0.995) && st.id !== "cover";
+        const touches = box && (box[0] < 0.005 || box[1] < 0.005 || box[2] > 0.995 || box[3] > 0.995) && st.id !== "cover" && st.id !== "worn";
         return { cut: !!r.tagliato || (r.capo === false) || !!touches, where: r.capo === false ? "non vedo il capo" : (r.dove || (touches ? "tocca il bordo" : "")), box };
       } catch (_) { return null; }   // senza rete si va avanti lo stesso
     }
 
     // ---------- elaborazione (in sottofondo, due alla volta) ----------
     const waiting = [];
-    const resultKey = s => s.choice === "ai" ? s.uid + ":ai" : (s.kind === "main" && s.step !== "cover" ? s.uid + ":prep" : s.uid + ":orig");
+    const resultKey = s => s.choice === "ai" ? s.uid + ":ai" : (s.kind === "main" && s.step !== "cover" && s.step !== "worn" ? s.uid + ":prep" : s.uid + ":orig");
     function queue(s) { if (!waiting.includes(s.uid)) waiting.push(s.uid); s.proc = "queued"; pump(); }
     function pump() {
       while (running < 2 && waiting.length) {
@@ -357,7 +357,7 @@
       const st = stepOf(s), c = await origCanvas(s); if (!c) return;
       s.proc = "working"; s.phase = "Sistemo luce e inquadratura"; render();
       let input = c;
-      if (s.kind === "main" && s.step !== "cover") {
+      if (s.kind === "main" && s.step !== "cover" && s.step !== "worn") {
         // fronte/retro: raddrizza (angolo del capo) e ritaglia attorno al cappotto
         const t = s.tilt != null ? s.tilt : Q.tilt(c);
         const tiltFix = t != null && Math.abs(t) >= 0.8 && Math.abs(t) <= 10 ? t : 0;

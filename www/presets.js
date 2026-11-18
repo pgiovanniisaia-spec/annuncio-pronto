@@ -23,6 +23,7 @@
       <path d="M100 4v10m-4-4 4 4 4-4" opacity=".8"/>`),
     back: S(`<rect x="8" y="10" width="104" height="72" rx="6" opacity=".45"/><g transform="translate(0 -4)">${COAT_FLAT.replace("M53 24l7 10 7-10M60 34v40", "M53 24q7 4 14 0M60 30v44")}</g>
       <path d="M96 10a8 8 0 1 1-6 3m-1-5v6h6" opacity=".8"/>`),
+    worn: S(`<circle cx="60" cy="14" r="7"/><path d="M46 28l-12 6-6 34 7 2 4-22v38h42V48l4 22 7-2-6-34-12-6q-14 8-28 0z"/><path d="M60 28v46"/>`),
     brand: S(`<rect x="28" y="20" width="64" height="44" rx="4"/><path d="M40 36h40M48 48h24" stroke-width="4"/><path d="M34 26h0M86 26h0M34 58h0M86 58h0"/>`),
     size: S(`<rect x="34" y="12" width="52" height="66" rx="4"/><path d="M46 28h28" stroke-width="5"/><path d="M44 42h32M44 52h26M44 62h30" opacity=".7"/>`),
     lining: S(`<path d="M36 14l-14 8-6 54h26l2-46 16-10 16 10 2 46h26l-6-54-14-8"/><path d="M44 30l4 46M76 30l-4 46M52 26l8 6 8-6" opacity=".6"/><path d="M50 40l20 30M58 38l14 22M48 52l14 22" opacity=".35"/>`),
@@ -49,10 +50,14 @@
       cat: "Capispalla",
       tipo: "Cappotto",
       steps: [
-        { id: "cover", short: "Copertina", title: "Copertina – appeso al muro", ai: "coat-cover", framing: true, level: "vertical", shape: "hanging", order: 1,
+        { id: "cover", short: "Copertina", title: "Copertina 3/4 – appeso al muro", ai: "coat-cover", framing: true, level: "vertical", shape: "hanging", order: 1,
           tips: ["Cappotto su una gruccia, appeso a un gancio o a una porta, contro un muro chiaro e libero.",
                  "Luce naturale da una finestra di lato, niente flash.",
                  "Cappotto intero nell'inquadratura: telefono all'altezza del petto, dritto, a 1,5–2 m."] },
+        { id: "worn", short: "Indossato", title: "Indossato (facoltativa)", ai: null, level: "vertical", shape: "hanging", order: 2.5, offByDefault: true,
+          tips: ["Foto del cappotto indossato, intera, davanti a un muro chiaro.",
+                 "Luce naturale da una finestra di lato, niente flash.",
+                 "Resta una foto vera: non viene modificata con l'AI."] },
         { id: "front", short: "Fronte", title: "Fronte in piano", ai: "flat-clean", straighten: true, framing: true, level: "flat", shape: "flat", order: 2,
           tips: ["Stendilo su un letto o un pavimento chiaro.",
                  "Maniche distese e abbottonato, senza pieghe grosse.",
@@ -86,5 +91,18 @@
     abbigliamento: { id: "abbigliamento", name: "Maglie e altro", soon: true, icon: `<path d="M44 20l-16 8-8 16 10 4 4-6v38h52V42l4 6 10-4-8-16-16-8q-16 10-32 0z"/>` }
   };
 
+  // Scaletta modificabile: l'utente spegne i passi che non gli servono (salvato in localStorage "ll_steps_off").
+  const STEPS = {
+    off(presetId) {
+      const p = PRESETS[presetId];
+      let raw = null; try { raw = localStorage.getItem("ll_steps_off_" + presetId); } catch (_) {}
+      if (raw !== null) { try { const a = JSON.parse(raw); if (Array.isArray(a)) return a; } catch (_) {} }
+      return ((p && p.steps) || []).filter(x => x.offByDefault).map(x => x.id);
+    },
+    setOff(presetId, ids) { try { localStorage.setItem("ll_steps_off_" + presetId, JSON.stringify(ids)); } catch (_) {} },
+    active(presetId) { const off = STEPS.off(presetId); return PRESETS[presetId].steps.filter(x => !off.includes(x.id)); }
+  };
+
+  window.LL_STEPS = STEPS;
   window.LL_PRESETS = { PRESETS, ILL, SHAPES, ORDER: ["cappotto", "giacca", "scarpe", "abbigliamento"] };
 })();
