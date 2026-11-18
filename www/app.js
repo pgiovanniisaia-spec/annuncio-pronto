@@ -64,6 +64,7 @@ let imgQuality = store.get("ap_img_quality", "high");
 // Regista (Claude): modello e conferma prima di ogni copertina
 let directorModel = store.get("ap_director_model", "claude-sonnet-5-5");
 let confirmCover = store.get("ap_confirm_cover", "1") === "1";
+let directorCheck = store.get("ap_director_check", "0") === "1";
 // aggiornamento: qualità Alta e modello più recente come predefiniti (una volta sola)
 if (store.get("ap_img_v2", "") !== "1") {
   if (imgQuality === "medium") imgQuality = "high";
@@ -93,6 +94,8 @@ section("impostazioni", () => {
   seg("imgQuality", v => { pendingQuality = v; });
   seg("directorModel", v => { pendingDirector = v; });
   // la conferma prima di ogni copertina si applica subito
+  $("directorCheck").checked = directorCheck;
+  $("directorCheck").addEventListener("change", () => { directorCheck = $("directorCheck").checked; store.set("ap_director_check", directorCheck ? "1" : "0"); });
   $("confirmCover").addEventListener("change", () => { confirmCover = $("confirmCover").checked; store.set("ap_confirm_cover", confirmCover ? "1" : "0"); });
   if (window.LLStyleRef) window.LLStyleRef.manage($("styleManager"));
   $("saveSettings").onclick = () => {
@@ -131,7 +134,7 @@ function showTab(name) {
   if (name === "ai" && studio) { studio.sync(); if (studio.updateCost) studio.updateCost(); }
   if (name === "ai" || name === "home") renderPlan();
   if (name === "desc") { renderDescPreview(); updateDescNow(); }
-  if (name === "stock" && stock) stock.render();
+  if (name === "stock" && stock) { stock.render(); updateFinish(); }
   if (name === "box" && window.LLArchive) window.LLArchive.render();
 }
 section("schede", () => {
@@ -291,7 +294,17 @@ function updateDescNow() {
   if (!h) return;
   h.textContent = !n ? "Nessuna foto in Carica: aggiungi o riapri un articolo." : S.text ? `${n} foto · descrizione già scritta: puoi riscriverla col modello aggiornato.` : `${n} foto in Carica, descrizione ancora da scrivere.`;
 }
+section("misure", () => {
+  const ids = Object.values(MEASURES);
+  ids.forEach((id, i) => $(id).addEventListener("keydown", e => {
+    if (e.key !== "Enter") return; e.preventDefault();
+    if (ids[i + 1]) $(ids[i + 1]).focus(); else $(id).blur();
+  }));
+});
+
 section("flusso", () => {
+  $("finishHome").addEventListener("click", finishArticle);
+  $("finishStock").addEventListener("click", finishArticle);
   $("readyBtn").addEventListener("click", () => { if (S.items.length) showTab("ai"); });
   $("toDesc").addEventListener("click", () => showTab("desc"));
 });
@@ -339,7 +352,7 @@ function setCategory(v) {
   S.cat = v; segSet("cat", v);
   const hints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
   $("size").placeholder = hints[v] || "";
-  $("measuresField").hidden = v !== "Capispalla";
+  $("measuresField").hidden = v === "Scarpe";
 }
 // ---------- dettagli: lettura e scrittura (anche dal servizio guidato) ----------
 const MEASURES = { shoulders: "mShoulders", pit: "mPit", length: "mLength", sleeve: "mSleeve" };
@@ -804,7 +817,7 @@ function refresh() {
   const c = $("count"); const txt = `${n} / ${MAX}`;
   if (c.textContent !== txt) { c.textContent = txt; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
   $("photoTools").hidden = !ready;
-  $("go").disabled = !n || S.writing; $("readyBtn").disabled = !n;
+  $("go").disabled = !n || S.writing; $("readyBtn").disabled = !n; updateFinish();
   $("saveStock").disabled = !n || ready < n;
   if (studio) studio.sync();
   updateDescNow();
@@ -1049,6 +1062,7 @@ on("go", async () => {
   $("status").classList.remove("err");
   if (note) setStatus(note, true); else { setStatus("Fatto. Condividi le foto e copia il testo su Vinted."); }
   $("go").disabled = false; $("go").textContent = "Riscrivi l'annuncio";
+  if (S.finishAfter) setTimeout(finishArticle, 300);
   $("reset").hidden = false;
   updateDescNow();
 });
@@ -1143,14 +1157,17 @@ function archiveSoon() {
   const tick = async () => {
     const busy = queue.length || active || S.items.some(i => i.el.classList.contains("working") || !i.outPromise);
     if (busy && Date.now() - t0 < 60000) { archTimer = setTimeout(tick, 600); return; }
-    if (!S.items.length || !(S.text || S.items.some(i => i.aiNative && i.edits.has("ai")))) return;
+    await archiveNow();
+  };
+  archTimer = setTimeout(tick, 900);
+}
+async function archiveNow() {
+    if (!window.LLArchive || !S.items.length || !(S.text || S.items.some(i => i.aiNative && i.edits.has("ai")))) return;
     try {
       if (!S.archId) S.archId = S.histId || ("a" + Date.now().toString(36));
       const t = S.text || {};
       await window.LLArchive.save({ id: S.archId, titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag }, await orderedBlobs());
     } catch (_) {}
-  };
-  archTimer = setTimeout(tick, 900);
 }
 // foto finali in Magazzino: si aspetta che la griglia abbia finito di sistemarle (massimo 1 minuto)
 let snapTimer = 0;
@@ -1216,7 +1233,11 @@ on("reset", () => {
     setTimeout(() => { b.dataset.sure = ""; b.textContent = "+ Nuovo articolo"; }, 3000);
     return;
   }
-  b.dataset.sure = ""; b.textContent = "+ Nuovo articolo"; b.hidden = true;
+  b.dataset.sure = ""; b.textContent = "+ Nuovo articolo";
+  clearArticle();
+});
+function clearArticle() {
+  $("reset").hidden = true;
   S.items.forEach(it => { it.ver++; it.el.remove(); });
   $("grid").classList.remove("sorting");
   S.items = []; S.text = null; S.histId = null; S.archId = null; S.directorAnalysis = null;
@@ -1228,7 +1249,47 @@ on("reset", () => {
   $("status").classList.remove("err");
   refresh();
   window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-});
+}
+
+// ---------- «Salva articolo»: chiude l'articolo in corso, lo mette in Magazzino e svuota tutto per il prossimo ----------
+async function finishArticle() {
+  if (!S.items.length) return;
+  if (S.writing) {           // la descrizione sta arrivando: si chiude da solo appena è pronta
+    S.finishAfter = true; setStatus("Salvo l'articolo appena finisce la descrizione…"); updateFinish(); return;
+  }
+  const btns = ["finishHome", "finishStock"].map($).filter(Boolean);
+  btns.forEach(b => { b.disabled = true; });
+  setStatus("Salvo l'articolo…");
+  try {
+    await (window.LLKeep ? window.LLKeep.run(waitPhotos()) : waitPhotos());
+    const id = await saveStockNow(S.text ? {} : { photosOnly: true });
+    if (S.text || S.items.some(i => i.aiNative)) { clearTimeout(archTimer); await archiveNow(); }
+    if (guided && guided.active) { try { await guided.cancel(); } catch (_) {} }
+    clearArticle();
+    S.finishAfter = false;
+    if (stock) stock.render();
+    if (window.LLArchive) window.LLArchive.play();
+    appToast(id ? "Articolo salvato in Magazzino ✓ Puoi caricare il prossimo." : "Articolo chiuso. Puoi caricare il prossimo.");
+    showTab("home");
+  } finally { btns.forEach(b => { b.disabled = false; }); updateFinish(); }
+}
+function waitPhotos() {
+  return new Promise(res => {
+    const t0 = Date.now();
+    const tick = () => {
+      const busy = queue.length || active || S.items.some(i => i.el.classList.contains("working") || !i.outPromise);
+      if (busy && Date.now() - t0 < 60000) setTimeout(tick, 400); else res();
+    };
+    tick();
+  });
+}
+function updateFinish() {
+  const n = S.items.length;
+  const fh = $("finishHome"); if (fh) fh.hidden = !n;
+  const cc = $("curCard"); if (cc) cc.hidden = !n;
+  const ch = $("curHint");
+  if (ch) ch.textContent = n ? n + " foto" + (S.text ? " · descrizione scritta" : " · descrizione non ancora scritta") + (S.finishAfter ? " · lo salvo appena finisce" : "") : "";
+}
 
 // ---------- foto modificate con l'AI (OpenAI, ai-images.js) ----------
 const toBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("blob")), type || "image/jpeg", q || 0.92));
@@ -1263,7 +1324,7 @@ section("regista", () => {
     claudeKey: () => apiKey, directorModel: () => directorModel,
     openaiKey: () => openaiKey, imgModel: () => imgModel, imgQuality: () => imgQuality, imgSize
   });
-  flow = window.createDirectorFlow({ director, confirm: () => confirmCover, toast: msg => appToast(msg) });
+  flow = window.createDirectorFlow({ director, confirm: () => confirmCover, check: () => directorCheck, toast: msg => appToast(msg) });
 });
 let flowChain = Promise.resolve();
 function appToast(msg) {

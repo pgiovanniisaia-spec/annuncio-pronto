@@ -98,3 +98,9 @@ Il workflow mette in `~/.android/debug.keystore` il secret `DEBUG_KEYSTORE_BASE6
 - Carica: solo foto e dati dell'articolo, poi il pulsante «Pronto» porta a Foto. Qui NON si scrive più l'annuncio.
 - Foto: scaletta e copertina; in fondo «Avanti: scrivi la descrizione».
 - Descrizione: modello del venditore, tono, pulsante `go` («Scrivi l'annuncio») e risultato (`resText`). Se c'è il modello (`ll_desc_template`), `buildPrompt` impone a Claude di copiarlo riga per riga; senza modello vale lo stile standard.
+
+## Velocità, sottofondo e «Salva articolo»
+- `plugins/keep-alive/` — plugin locale (Java) `KeepAlive.start({text})` / `stop()`: servizio in primo piano (`dataSync`) con notifica e wake lock (max 30 min), WebView a priorità alta e timer accesi. `www/keepalive.js` avvolge `fetch`: lo accende a ogni chiamata a api.anthropic.com / api.openai.com e lo spegne 10 s dopo l'ultima. `LLKeep.run(promessa)` per lavori lunghi senza rete. Android 13+ chiede il permesso notifiche al primo uso.
+- Impostazioni → AI: «Controllo del regista dopo lo scatto» (`ap_director_check`, spento): se spento, `director-ui.js` salta `D.check` e mostra «Pronta: guardala tu».
+- «Salva articolo» (`finishArticle` in app.js): pulsante in fondo a Carica (`finishHome`) e riquadro «Articolo in corso» in Magazzino (`finishStock`). Aspetta le foto, salva in Magazzino e in Archivio, annulla il servizio guidato e svuota tutto (`clearArticle`). Se la descrizione sta arrivando, chiude appena è pronta (`S.finishAfter`).
+- Misure: visibili per Abbigliamento e Capispalla (non Scarpe); «Avanti» della tastiera passa al campo successivo.

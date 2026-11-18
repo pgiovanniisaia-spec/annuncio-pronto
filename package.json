@@ -20,7 +20,8 @@
     "@capacitor/haptics": "^7.0.5",
     "@capacitor/share": "^7.0.0",
     "@capacitor/splash-screen": "^7.0.5",
-    "capacitor-gallery-saver": "file:plugins/gallery-saver"
+    "capacitor-gallery-saver": "file:plugins/gallery-saver",
+    "capacitor-keep-alive": "file:plugins/keep-alive"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

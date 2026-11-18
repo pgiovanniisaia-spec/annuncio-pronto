@@ -124,7 +124,7 @@
           const r = st.report;
           B.innerHTML = `<div class="d-res"><div class="d-img"><img id="dImg" src="${resultUrl}" alt="Risultato"><span class="g-tag r">AI</span>
               <button type="button" class="d-hold" data-d="toggleorig">Mostra originale</button></div>
-            <div class="d-verdict ${r.approvata ? "ok" : "ko"}"><b>${r.approvata ? "Approvata dal regista" : "Il regista la boccia"}</b><span>Voto ${esc(r.voto)}/10</span></div>
+            <div class="d-verdict ${r.approvata ? "ok" : "ko"}"><b>${r.skipped ? "Pronta: guardala tu" : r.approvata ? "Approvata dal regista" : "Il regista la boccia"}</b><span>${r.skipped ? "controllo saltato" : "Voto " + esc(r.voto) + "/10"}</span></div>
             ${checksHtml(r)}
             ${spentBox()}</div>`;
           F.innerHTML = `<button type="button" class="btn" data-d="orig">Tieni l'originale</button><button type="button" class="btn" data-d="retry">Riprova con correzione</button><button type="button" class="btn primary" data-d="use">Usa questa</button>`;
@@ -178,6 +178,11 @@
           await doCheck();
         }
         async function doCheck() {
+          if (opts.check && !opts.check()) {      // controllo spento: si guarda la foto e si decide, senza chiamata in più
+            st.report = { approvata: true, voto: "–", controlli: [], problemi: [], prompt_corretto: "", skipped: true };
+            st.shots.push({ prompt: st.prompt, approvata: true, voto: "–" });
+            st.stage = "result"; render(); return;
+          }
           st.stage = "check"; st.error = ""; render();
           try {
             const r = await D.check({ original: job.original, result: st.result, prompt: st.prompt, brief: st.brief, lavoro: job.lavoro });
@@ -214,7 +219,7 @@
       const r = rep.report || {};
       w.innerHTML = `<div class="ll-sheet-box d-report"><h3>Controllo regista</h3>
         ${rep.brief ? `<p><b>Cosa ho visto:</b> ${esc(rep.brief.visto)}</p>` : ""}
-        <div class="d-verdict ${r.approvata ? "ok" : "ko"}"><b>${r.approvata ? "Approvata" : "Bocciata"}</b><span>Voto ${esc(r.voto)}/10</span></div>
+        <div class="d-verdict ${r.approvata ? "ok" : "ko"}"><b>${r.skipped ? "Pronta" : r.approvata ? "Approvata" : "Bocciata"}</b><span>${r.skipped ? "controllo saltato" : "Voto " + esc(r.voto) + "/10"}</span></div>
         <ul class="d-checks">${(r.controlli || []).map(c => `<li class="${c.ok ? "ok" : "ko"}"><span>${c.ok ? "✓" : "✗"}</span>${esc(c.voce)}</li>`).join("")}</ul>
         ${(r.problemi || []).length ? `<div class="d-probs"><strong>Problemi</strong><ul>${r.problemi.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
         ${rep.costs ? `<p class="hint">Costo: Claude ${money3(rep.costs.claude)} · OpenAI ${money3(rep.costs.openai)} · ${rep.shots ? rep.shots.length : 1} scatti</p>` : ""}

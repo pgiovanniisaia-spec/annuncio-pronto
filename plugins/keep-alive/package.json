@@ -1,0 +1,13 @@
+{
+  "name": "capacitor-keep-alive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plugin Capacitor minimo: tiene l app attiva (servizio in primo piano con notifica) mentre lavora in sottofondo.",
+  "files": ["android/src/main/", "android/build.gradle"],
+  "capacitor": {
+    "android": { "src": "android" }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  }
+}

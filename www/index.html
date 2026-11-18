@@ -166,10 +166,10 @@
     <div class="field" id="measuresField" hidden>
       <span class="label">Misure in cm (facoltative)</span>
       <div class="mgrid">
-        <label><span>Spalle</span><input type="number" inputmode="decimal" id="mShoulders" min="0" max="300" placeholder="cm"></label>
-        <label><span>Ascella-ascella</span><input type="number" inputmode="decimal" id="mPit" min="0" max="300" placeholder="cm"></label>
-        <label><span>Lunghezza</span><input type="number" inputmode="decimal" id="mLength" min="0" max="300" placeholder="cm"></label>
-        <label><span>Manica</span><input type="number" inputmode="decimal" id="mSleeve" min="0" max="300" placeholder="cm"></label>
+        <label><span>Spalle</span><input type="number" inputmode="decimal" enterkeyhint="next" id="mShoulders" min="0" max="300" placeholder="cm"></label>
+        <label><span>Ascella-ascella</span><input type="number" inputmode="decimal" enterkeyhint="next" id="mPit" min="0" max="300" placeholder="cm"></label>
+        <label><span>Lunghezza</span><input type="number" inputmode="decimal" enterkeyhint="next" id="mLength" min="0" max="300" placeholder="cm"></label>
+        <label><span>Manica</span><input type="number" inputmode="decimal" enterkeyhint="done" id="mSleeve" min="0" max="300" placeholder="cm"></label>
       </div>
     </div>
     <div class="field">
@@ -201,6 +201,7 @@
   <button class="go" id="saveStock" type="button" disabled hidden>Salva in Magazzino</button>
   <div class="status" id="status" role="status">Aggiungi almeno una foto per iniziare.</div>
   <button class="go" id="readyBtn" type="button" disabled>Pronto: passa alle foto</button>
+  <button class="btn finish" id="finishHome" type="button" hidden>✓ Salva articolo e inizia il prossimo</button>
 
 
 </main>
@@ -274,6 +275,12 @@
   <button class="gear" type="button" data-goto="settings" aria-label="Impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </header>
   <p class="lead">I tuoi articoli salvati, con foto e stato. Tocca un articolo per cambiare lo stato, riaprirlo o eliminarlo. Restano su questo telefono.</p>
+  <section class="panel current" id="curCard" hidden>
+    <div class="step"><h2>Articolo in corso</h2></div>
+    <span class="hint" id="curHint"></span>
+    <button class="go" id="finishStock" type="button">✓ Salva articolo</button>
+    <span class="hint">Lo chiude e lo mette qui sotto: le prossime foto che carichi diventano un articolo nuovo.</span>
+  </section>
   <div class="seg stock-filters" id="stockFilters" role="group" aria-label="Filtra per stato"></div>
   <div class="empty" id="stockEmpty" hidden>
     <span>Nessun articolo ancora. Quando scrivi un annuncio o salvi le foto, lo trovi qui.</span>
@@ -355,6 +362,8 @@
       </div>
       <span class="hint">Il regista guarda le foto, scrive le istruzioni per il fotografo e controlla il risultato. «Più accurato» (Sonnet) è consigliato: circa 2–3 centesimi a copertina.</span>
     </div>
+    <label class="toggle"><input type="checkbox" id="directorCheck"> Controllo del regista dopo lo scatto (più lento)</label>
+    <span class="hint">Spento: la copertina arriva prima e la guardi tu. Acceso: Claude la controlla e ti dà un voto (una chiamata in più).</span>
     <label class="toggle"><input type="checkbox" id="confirmCover" checked> Chiedi conferma prima di ogni copertina</label>
     <span class="hint">Se la disattivi, la sintesi compare solo come notifica e lo scatto parte da solo (sempre 1 foto).</span>
     <div class="field">
@@ -431,6 +440,7 @@
 </div>
 
 <script src="errors.js"></script>
+<script src="keepalive.js"></script>
 <script src="enhance.js"></script>
 <script src="ai-images.js"></script>
 <script src="ai-ui.js"></script>
