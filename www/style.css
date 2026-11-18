@@ -547,3 +547,18 @@ html.director-open{overflow:hidden}
 .g-skip{font-size:13px;color:var(--muted);margin-top:4px}
 .g-addback{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:-4px 0 8px}
 #planSetup{display:flex;flex-direction:column;gap:14px}
+
+/* Archivio: scatola animata nella barra */
+.tabbar .bx-lid{transform-box:fill-box;transform-origin:0% 100%}
+.tabbar .bx-item{opacity:0}
+.tabbar .boxing .bx-lid{animation:bxlid 1.5s ease-in-out}
+.tabbar .boxing .bx-item{animation:bxitem 1.5s ease-in-out}
+@keyframes bxlid{0%,100%{transform:rotate(0)}15%,70%{transform:rotate(-38deg)}}
+@keyframes bxitem{0%,10%{opacity:0;transform:translateY(-7px)}25%{opacity:1;transform:translateY(-2px)}55%{opacity:1;transform:translateY(5px)}65%,100%{opacity:0;transform:translateY(6px)}}
+.tabbar button{min-width:0}
+.boxlist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:14px}
+.boxitem{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.boxstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.boxstrip img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;background:var(--line)}
+.boxdesc{white-space:pre-wrap;font:inherit;font-size:14px;margin:0;max-height:9.5em;overflow:auto}
+@media (prefers-reduced-motion: reduce){.tabbar .boxing .bx-lid,.tabbar .boxing .bx-item{animation:none}}

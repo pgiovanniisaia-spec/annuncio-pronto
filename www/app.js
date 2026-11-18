@@ -132,6 +132,7 @@ function showTab(name) {
   if (name === "ai" || name === "home") renderPlan();
   if (name === "desc") { renderDescPreview(); updateDescNow(); }
   if (name === "stock" && stock) stock.render();
+  if (name === "box" && window.LLArchive) window.LLArchive.render();
 }
 section("schede", () => {
   document.addEventListener("click", e => {
@@ -1043,7 +1044,7 @@ on("go", async () => {
   S.text = text;
   S.histId = saveHistory(text, S.histId);
   renderText(text, S.histId);
-  snapshotSoon(S.histId);
+  snapshotSoon(S.histId); archiveSoon();
   S.writing = false;
   $("status").classList.remove("err");
   if (note) setStatus(note, true); else { setStatus("Fatto. Condividi le foto e copia il testo su Vinted."); }
@@ -1127,11 +1128,29 @@ let editTimer = 0;
 function saveHistoryEditSoon(id, t) {
   if (!id || !stock) return;
   clearTimeout(editTimer);
-  editTimer = setTimeout(() => stock.patch(id, { titolo: t.titolo, descrizione: t.descrizione }), 400);
+  editTimer = setTimeout(() => { stock.patch(id, { titolo: t.titolo, descrizione: t.descrizione }); if (window.LLArchive && S.archId) window.LLArchive.patch(S.archId, { titolo: t.titolo, descrizione: t.descrizione }); }, 400);
 }
 function fmtDate(ms) {
   const d = new Date(ms);
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+}
+// Archivio (la scatola): salva da solo descrizione + prime 4 foto quando una copertina AI è approvata o l'annuncio è scritto
+let archTimer = 0;
+function archiveSoon() {
+  if (!window.LLArchive) return;
+  clearTimeout(archTimer);
+  const t0 = Date.now();
+  const tick = async () => {
+    const busy = queue.length || active || S.items.some(i => i.el.classList.contains("working") || !i.outPromise);
+    if (busy && Date.now() - t0 < 60000) { archTimer = setTimeout(tick, 600); return; }
+    if (!S.items.length || !(S.text || S.items.some(i => i.aiNative && i.edits.has("ai")))) return;
+    try {
+      if (!S.archId) S.archId = S.histId || ("a" + Date.now().toString(36));
+      const t = S.text || {};
+      await window.LLArchive.save({ id: S.archId, titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag }, await orderedBlobs());
+    } catch (_) {}
+  };
+  archTimer = setTimeout(tick, 900);
 }
 // foto finali in Magazzino: si aspetta che la griglia abbia finito di sistemarle (massimo 1 minuto)
 let snapTimer = 0;
@@ -1200,7 +1219,7 @@ on("reset", () => {
   b.dataset.sure = ""; b.textContent = "+ Nuovo articolo"; b.hidden = true;
   S.items.forEach(it => { it.ver++; it.el.remove(); });
   $("grid").classList.remove("sorting");
-  S.items = []; S.text = null; S.histId = null; S.directorAnalysis = null;
+  S.items = []; S.text = null; S.histId = null; S.archId = null; S.directorAnalysis = null;
   ["brand", "size", "notes", "material", ...Object.values(MEASURES)].forEach(id => { $(id).value = ""; });
   ["brand", "size", "material"].forEach(id => markAuto(id, false));
   $("cond").value = "Ottime condizioni";
@@ -1221,6 +1240,8 @@ async function useAiImage(it, blob) {
   it.rot = 0; it.tilt = 0; it.box = null; it.boxRot = 0;
   it.noEnhance = true; it.aiNative = true; it.lockCrop = true; it.edits.add("ai");
   await enqueue(() => renderItem(it));
+  if (S.histId) snapshotSoon(S.histId);
+  archiveSoon();
 }
 async function keepOriginal(it) {
   if (!it.origSrc) return;
@@ -1425,7 +1446,7 @@ async function replaceGrid(entries) { return loadGrid(entries); }
 // sostituisce le foto della griglia; stored = foto finali dal Magazzino (già sistemate: nessuna nuova correzione)
 async function loadGrid(entries) {
   S.items.forEach(it => { it.ver++; it.el.remove(); });
-  S.items = []; S.text = null; S.histId = null;
+  S.items = []; S.text = null; S.histId = null; S.archId = null;
   $("resText").hidden = true; $("out").innerHTML = "";
   $("status").classList.remove("err");
   const jobs = entries.slice(0, MAX).map((e, i) => {
