@@ -296,11 +296,34 @@ function updateDescNow() {
 }
 section("misure", () => {
   const ids = ["mShoulders", "mPit", "mLength", "mSleeve"];   // MEASURES è definito più sotto
+  ids.forEach(id => $(id).addEventListener("input", sizeChartSoon));
+  const sc = $("sizeChartOn");
+  sc.checked = store.get("ll_size_chart", "1") === "1";
+  sc.addEventListener("change", () => { store.set("ll_size_chart", sc.checked ? "1" : "0"); sizeChartSoon(); });
   ids.forEach((id, i) => $(id).addEventListener("keydown", e => {
     if (e.key !== "Enter") return; e.preventDefault();
     if (ids[i + 1]) $(ids[i + 1]).focus(); else $(id).blur();
   }));
 });
+
+// ---------- scheda misure: immagine con sagoma e misure, sempre ultima foto, si aggiorna da sola ----------
+let chartTimer = 0, chartSeq = 0;
+function sizeChartSoon() { clearTimeout(chartTimer); chartTimer = setTimeout(updateSizeChart, 700); }
+async function updateSizeChart() {
+  if (!window.LLSizeChart) return;
+  const my = ++chartSeq;
+  const old = S.items.find(i => i.sizeChart);
+  const m = $("measuresField").hidden ? {} : getDetails().measures;
+  const on = store.get("ll_size_chart", "1") === "1";
+  const photos = S.items.filter(i => !i.sizeChart).length;
+  if (!on || !photos || !Object.keys(m).length) { if (old) removeItem(old); return; }
+  const blob = await window.LLSizeChart.make({ measures: m, title: (S.text && S.text.titolo) || "" });
+  if (my !== chartSeq || !blob) return;
+  if (old) removeItem(old);
+  if (S.items.length >= MAX) return;
+  const it = newItem(new File([blob], "misure.jpg", { type: "image/jpeg" }), { noEnhance: true, aiNative: true, lockCrop: true, sizeChart: true });
+  startItem(it); refresh();
+}
 
 section("flusso", () => {
   $("finishHome").addEventListener("click", finishArticle);
@@ -352,7 +375,7 @@ function setCategory(v) {
   S.cat = v; segSet("cat", v);
   const hints = { Scarpe: "es. 42 EU", Abbigliamento: "es. M o 44 IT", Capispalla: "es. L o 50 IT" };
   $("size").placeholder = hints[v] || "";
-  $("measuresField").hidden = v === "Scarpe";
+  $("measuresField").hidden = v === "Scarpe"; sizeChartSoon();
 }
 // ---------- dettagli: lettura e scrittura (anche dal servizio guidato) ----------
 const MEASURES = { shoulders: "mShoulders", pit: "mPit", length: "mLength", sleeve: "mSleeve" };
@@ -366,7 +389,7 @@ function getDetails() {
 }
 // i campi letti dall'etichetta si segnano «letti dall'etichetta» finché l'utente non li modifica
 function setDetails(d, autoKeys) {
-  d = d || {};
+  d = d || {}; sizeChartSoon();
   for (const id of ["brand", "size", "material", "notes"]) if (d[id] != null) $(id).value = d[id];
   if (d.cond) $("cond").value = d.cond;
   if (d.measures) for (const [k, id] of Object.entries(MEASURES)) $(id).value = d.measures[k] || "";
@@ -447,7 +470,7 @@ function addFiles(list) {
     if (S.items.length >= MAX) { skipped++; continue; }
     startItem(newItem(f));
   }
-  refresh();
+  refresh(); sizeChartSoon();   // la scheda misure torna in fondo
   if (skipped) setStatus(`Massimo ${MAX} foto: ${skipped} non aggiunte.`, true);
 }
 
@@ -792,7 +815,7 @@ function onDragEnd(e) {
   if (d.to !== d.from) setStatus(d.to === 0 ? "Nuova copertina impostata." : `Foto spostata in posizione ${d.to + 1}.`);
 }
 
-function label(it) { return S.items[0] === it ? "Copertina" : String(S.items.indexOf(it) + 1); }
+function label(it) { if (it.sizeChart) return "Misure"; return S.items[0] === it ? "Copertina" : String(S.items.indexOf(it) + 1); }
 function setWorking(it, on) {
   if (!it.el) return;
   it.el.classList.toggle("working", on);
