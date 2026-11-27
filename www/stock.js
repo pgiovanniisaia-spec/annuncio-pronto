@@ -127,6 +127,7 @@
         ${e.descrizione ? `<p class="sk-desc">${esc(e.descrizione)}</p>` : `<p class="hint">Solo foto: nessuna descrizione. Riaprilo per scriverla quando vuoi.</p>`}
         <div class="toolbar">
           <button type="button" class="btn primary" data-act="reopen">Riapri</button>
+          ${e.titolo ? `<button type="button" class="btn" data-act="copytitle">Copia titolo</button>` : ""}
           ${e.descrizione ? `<button type="button" class="btn" data-act="copy">Copia testo</button>` : ""}
           <button type="button" class="btn danger" data-act="del">Elimina</button>
         </div>
@@ -147,6 +148,7 @@
           case "toggle": openId = openId === id ? null : id; render(); break;
           case "state": patch(id, { status: b.dataset.v }); api.haptic && api.haptic(); break;
           case "copy": msg(await api.copy(e) ? "Testo copiato ✓" : "Copia non riuscita"); break;
+          case "copytitle": { const ok = await api.copyText(e.titolo || ""); msg(ok ? "Titolo copiato ✓" : "Copia non riuscita"); break; }
           case "reopen": {
             if (api.busyGrid(id) && b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Sostituisco le foto in Carica?"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Riapri"; }, 3000); return; }
             b.disabled = true; msg("Apro l'articolo…");

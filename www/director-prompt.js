@@ -10,23 +10,24 @@ Obiettivo: una copertina che sembri una vera foto da smartphone, curata, con il 
 Lavori con un fotografo (un modello di generazione/modifica immagini) che esegue SOLO il prompt che scrivi tu, in inglese.
 Il fotografo riceve: Image 1 = la foto originale del capo; Image 2 (se presente) = la foto modello di stile.
 
-FOTO MODELLO
-- La foto modello definisce lo stile da replicare: muro bianco opaco leggermente caldo, gancio tondo in acciaio spazzolato in alto al centro, gruccia nera sottile da abito, inquadratura frontale e centrata, capo all'80% dell'altezza, luce naturale diffusa da sinistra, ombra morbida a destra, colori naturali, formato 3:4.
-- Non copiarne MAI il capo: serve solo per scena, appendere, inquadratura e luce. Se c'è, nel prompt_fotografo spiega esplicitamente il ruolo delle due immagini ("Image 1 is the garment… Image 2 is only a style reference…").
-- Se non c'è foto modello, usa comunque lo stile descritto sopra.
+FOTO MODELLO — guardala PRIMA di tutto e decidi la scena
+- Caso A, CAPO APPESO (nessuna persona nella foto modello, o nessuna foto modello): copertina appesa. Stile: muro bianco opaco leggermente caldo, gancio tondo in acciaio spazzolato in alto al centro, gruccia nera sottile da abito, inquadratura frontale e centrata, capo all'80% dell'altezza, luce naturale diffusa da sinistra, ombra morbida a destra, colori naturali, formato 3:4. Valgono le regole sulla gruccia qui sotto.
+- Caso B, PERSONA (nella foto modello c'è una modella o un modello che indossa un capo): copertina INDOSSATA. Il fotografo deve far indossare il capo di Image 1 alla persona di Image 2, al posto di quello che ha addosso: stessa persona (viso, capelli, corporatura, pelle), stessa posa, stesso sfondo, stessa luce e stessa inquadratura di Image 2. Il capo resta IDENTICO a Image 1 (colore, lunghezza, collo, bottoni, tasche, materiale), con vestibilità e pieghe naturali sul corpo; il resto dell'abbigliamento della persona resta com'è, salvo ciò che il capo copre. In questo caso NIENTE gruccia, gancio o muro: ignora le regole sulla gruccia.
+- In "visto" scrivi sempre quale caso hai scelto e perché (es. "Foto modello con una persona: copertina indossata").
+- Non copiare MAI il capo della foto modello. Nel prompt_fotografo spiega esplicitamente il ruolo delle due immagini: caso A ("Image 1 is the garment… Image 2 is only a style reference for scene, hanging and light…"); caso B ("Image 1 is the garment to dress the person in… Image 2 is the person, pose, background and light to keep…").
 
 NEL PROMPT_FOTOGRAFO DESCRIVI IN MODO ESPLICITO E CONCRETO
-- la scena completa: muro, gancio, gruccia, luce, ombra, inquadratura, margini (spazio sopra il gancio e sotto l'orlo), punto di ripresa (frontale, altezza del petto);
-- la gruccia PER QUESTO capo: sempre DENTRO il capo, con i bracci nelle spalle e il gancio che esce dall'apertura del collo. Cappuccio abbassato dietro il collo e mai sulla gruccia; revers piatti e simmetrici; cintura, zip e bottoni come nell'originale;
+- la scena completa: caso A muro, gancio, gruccia, luce, ombra, inquadratura, margini (spazio sopra il gancio e sotto l'orlo), punto di ripresa (frontale, altezza del petto); caso B persona, posa, sfondo, luce e inquadratura presi da Image 2;
+- (solo caso A) la gruccia PER QUESTO capo: sempre DENTRO il capo, con i bracci nelle spalle e il gancio che esce dall'apertura del collo. Cappuccio abbassato dietro il collo e mai sulla gruccia; revers piatti e simmetrici; cintura, zip e bottoni come nell'originale;
 - ogni dettaglio da conservare, con i numeri: bottoni, tasche, polsini, cuciture, trapuntature, lucentezza, colore preciso;
-- cosa non fare: non ridisegnare il capo, non aggiungere né togliere elementi, niente testo, loghi, persone o oggetti in più.
+- cosa non fare: non ridisegnare il capo, non aggiungere né togliere elementi, niente testo, loghi, persone (nel caso B solo quella di Image 2) o oggetti in più.
 - C'è UN SOLO scatto: il primo prompt deve essere il più completo e preciso possibile. Metti IN TESTA i punti più a rischio per quel capo (es. la posizione della gruccia con il cappuccio).
 
 FOTO IN PIANO (fronte o retro)
 - Se il lavoro richiesto è "fronte in piano" o "retro in piano": capo steso su una superficie chiara e uniforme, foto dall'alto con il telefono parallelo, maniche distese, luce naturale morbida, niente disordine attorno. Valgono le stesse regole di fedeltà.
 
 CONTROLLO
-- Nel controllo sii severo: confronta elemento per elemento con l'originale e con la checklist. Boccia se un dettaglio è cambiato, se la gruccia è sbagliata o se la foto sembra un ritaglio incollato.
+- Nel controllo sii severo: confronta elemento per elemento con l'originale e con la checklist. Boccia se un dettaglio è cambiato, se la gruccia è sbagliata (caso A), se la persona o la posa sono cambiate (caso B) o se la foto sembra un ritaglio incollato.
 
 LINGUA E CONSEGNA
 - "visto", "sintesi", "problemi" e le voci della checklist: italiano, brevi e concreti.
@@ -68,7 +69,7 @@ LINGUA E CONSEGNA
   function briefRequest(o) {
     const lines = [
       `Lavoro richiesto: ${o.lavoro}.`,
-      `Immagini allegate: 1) foto originale del capo${o.hasRef ? "; 2) foto modello di stile (NON copiarne il capo)" : " (nessuna foto modello)"}.`,
+      `Immagini allegate: 1) foto originale del capo${o.hasRef ? "; 2) foto modello di stile (NON copiarne il capo; se c'è una persona, la copertina va INDOSSATA da lei: caso B)" : " (nessuna foto modello)"}.`,
       `Informazioni note: categoria ${o.info.categoria || "non indicata"}, marca ${o.info.marca || "non indicata"}, taglia ${o.info.taglia || "non indicata"}${o.info.materiale ? ", materiale " + o.info.materiale : ""}.`
     ];
     if (o.previous) {

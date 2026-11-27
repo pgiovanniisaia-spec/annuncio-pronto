@@ -323,6 +323,7 @@ async function updateSizeChart() {
   if (S.items.length >= MAX) return;
   const it = newItem(new File([blob], "misure.jpg", { type: "image/jpeg" }), { noEnhance: true, aiNative: true, lockCrop: true, sizeChart: true });
   startItem(it); refresh();
+  if (S.archId && window.LLArchive && window.LLArchive.has(S.archId)) archiveSoon();
 }
 
 section("flusso", () => {
@@ -1185,13 +1186,14 @@ function archiveSoon() {
   archTimer = setTimeout(tick, 900);
 }
 async function archiveNow() {
-    if (!window.LLArchive || !S.items.length || !(S.text || S.items.some(i => i.aiNative && i.edits.has("ai")))) return;
+    if (!window.LLArchive || !S.items.length || !(S.text || S.items.some(i => i.aiNative && i.edits.has("ai")) || (S.archId && window.LLArchive.has(S.archId)))) return;
     try {
       if (!S.archId) S.archId = S.histId || ("a" + Date.now().toString(36));
       const t = S.text || {};
       const aiItems = S.items.filter(i => i.aiNative && i.edits.has("ai") && !i.el.classList.contains("failed"));
-      const aiBlobs = (await Promise.all(aiItems.map(i => i.outPromise))).filter(Boolean);
-      await window.LLArchive.save({ id: S.archId, titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag }, aiBlobs);
+      const chart = S.items.filter(i => i.sizeChart && !i.el.classList.contains("failed"));   // scheda misure: sempre accanto, per ultima
+      const aiBlobs = (await Promise.all(aiItems.concat(chart).map(i => i.outPromise))).filter(Boolean);
+      await window.LLArchive.save({ id: S.archId, titolo: t.titolo, descrizione: t.descrizione, hashtag: t.hashtag, chart: chart.length > 0 }, aiBlobs);
     } catch (_) {}
 }
 // foto finali in Magazzino: si aspetta che la griglia abbia finito di sistemarle (massimo 1 minuto)
@@ -1237,6 +1239,7 @@ section("magazzino", () => {
   stock = window.createStock({
     haptic,
     copy: e => copyPlain(fullText(e)),
+    copyText: t => copyPlain(t),
     busyGrid: id => S.items.length > 0 && S.histId !== id,
     reopen: reopenArticle,
     onRemoved: id => { if (S.histId === id) S.histId = null; }
@@ -1288,7 +1291,7 @@ async function finishArticle() {
   try {
     await (window.LLKeep ? window.LLKeep.run(waitPhotos()) : waitPhotos());
     const id = await saveStockNow(S.text ? {} : { photosOnly: true });
-    if (S.text || S.items.some(i => i.aiNative)) { clearTimeout(archTimer); await archiveNow(); }
+    clearTimeout(archTimer); await archiveNow();
     if (guided && guided.active) { try { await guided.cancel(); } catch (_) {} }
     clearArticle();
     S.finishAfter = false;
@@ -1358,7 +1361,7 @@ function appToast(msg) {
   t.textContent = msg; t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 4500);
 }
-const LAVORI = { cover: "copertina: capo appeso alla gruccia contro un muro", front: "fronte in piano: capo steso su superficie chiara, foto dall'alto", back: "retro in piano: capo steso girato su superficie chiara, foto dall'alto" };
+const LAVORI = { cover: "copertina: capo appeso alla gruccia contro un muro, OPPURE indossato dalla persona della foto modello se nella foto modello c'è una persona (decidi tu guardando la foto modello)", front: "fronte in piano: capo steso su superficie chiara, foto dall'alto", back: "retro in piano: capo steso girato su superficie chiara, foto dall'alto" };
 function knownInfo() { const d = getDetails(); return { categoria: S.cat, marca: d.brand, taglia: d.size, materiale: d.material }; }
 // l'analisi del regista compila i campi vuoti e alimenta la descrizione
 function applyAnalysis(an) {
@@ -1628,6 +1631,7 @@ async function writeListing(rules, honestNote) {
   const st = $("status");
   return { note: st.classList.contains("err") ? st.textContent : "" };
 }
+window.LLCopy = t => copyPlain(t);
 async function copyPlain(text) {
   try { await navigator.clipboard.writeText(text); return true; }
   catch (_) {

@@ -45,16 +45,16 @@
     x.beginPath(); x.moveTo(768, 520); x.lineTo(768, 1660); x.lineWidth = 5; x.stroke();
     x.fillStyle = LINE; [700, 880, 1060, 1240].forEach(y => { x.beginPath(); x.arc(810, y, 14, 0, 7); x.fill(); });
 
-    // frecce
+    // frecce (prima tutte le frecce, poi le etichette sopra: così nessuna scritta viene tagliata da una linea)
     x.strokeStyle = INK; x.lineWidth = 9; x.lineCap = "round";
-    if (m.shoulders) { arrow(x, 486, 330, 1050, 330); pill(x, "Spalle " + fmt(m.shoulders), W / 2, 330 - 2); }
-    if (m.pit) { arrow(x, 540, 700, 996, 700); pill(x, "Ascella-ascella " + fmt(m.pit), W / 2, 800); }
-    if (m.length) { arrow(x, 600, 470, 600, 1650); pill(x, "Lunghezza " + fmt(m.length), 600, 1300); }
-    if (m.sleeve) {
-      arrow(x, 1090, 412, 1290, 1200);
-      x.save(); x.translate(1200, 840); x.rotate(Math.atan2(788, 200) - Math.PI / 2);
-      pill(x, "Manica " + fmt(m.sleeve), 0, 0); x.restore();
-    }
+    if (m.shoulders) arrow(x, 486, 330, 1050, 330);
+    if (m.pit) arrow(x, 540, 700, 996, 700);
+    if (m.length) arrow(x, 600, 470, 600, 1650);
+    if (m.sleeve) arrow(x, 1090, 412, 1290, 1200);
+    if (m.shoulders) pill(x, "Spalle " + fmt(m.shoulders), W / 2, 328);
+    if (m.pit) pill(x, "Ascella-ascella " + fmt(m.pit), 790, 800);
+    if (m.length) pill(x, "Lunghezza " + fmt(m.length), 600, 1300);
+    if (m.sleeve) { x.save(); x.translate(1200, 840); x.rotate(Math.atan2(788, 200) - Math.PI / 2); pill(x, "Manica " + fmt(m.sleeve), 0, 0); x.restore(); }
 
     // riepilogo in basso
     const rows = [["Spalle", m.shoulders], ["Ascella-ascella", m.pit], ["Lunghezza", m.length], ["Manica", m.sleeve]].filter(r => r[1]);

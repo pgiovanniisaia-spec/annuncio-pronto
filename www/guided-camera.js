@@ -80,7 +80,10 @@
     }
 
     // ---------- fotocamera guidata ----------
-    async function open(o) {
+    // Fotocamera guidata (sagoma, bolla, avviso luce) TOLTA su richiesta dell'utente: si usa sempre la fotocamera
+    // normale del telefono. Il codice della versione guidata resta in guidedOpen, non usato.
+    async function open() { return systemCamera(); }
+    async function guidedOpen(o) {
       o = o || {};
       const CP = !previewBroken && plugin("CameraPreview");
       if (!CP) return systemCamera();

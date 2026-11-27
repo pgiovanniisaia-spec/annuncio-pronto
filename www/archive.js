@@ -43,7 +43,7 @@
     for (let i = 0; i < pics.length; i++) await DB.put(meta.id + ":" + i, pics[i]);
     for (let i = pics.length; i < (old ? old.photos || 0 : 0); i++) DB.del(meta.id + ":" + i);
     const e = Object.assign({}, old || {}, { id: meta.id, date: Date.now(), titolo: meta.titolo || (old && old.titolo) || "", descrizione: meta.descrizione || (old && old.descrizione) || "",
-      hashtag: meta.hashtag || (old && old.hashtag) || [], photos: pics.length });
+      hashtag: meta.hashtag || (old && old.hashtag) || [], photos: pics.length, chart: !!meta.chart });
     write([e].concat(list.filter(x => x.id !== meta.id)));
     play();
     if (!$("tab-box").hidden) render();
@@ -61,7 +61,7 @@
     const list = load(), e = list.find(x => x.id === id); if (!e || !blob) return;
     const old = [];
     for (let i = 0; i < (e.photos || 0); i++) { const b = await DB.get(id + ":" + i); if (b) old.push(b); }
-    const all = [blob].concat(old).slice(0, PHOTOS);
+    const all = [blob].concat(old.slice(0, PHOTOS - 1));   // la copertina va prima, la scheda misure resta in fondo
     for (let i = 0; i < all.length; i++) await DB.put(id + ":" + i, all[i]);
     e.photos = all.length; write(list);
     play();
@@ -110,7 +110,7 @@
         if (rm.dataset.sure !== "1") { rm.dataset.sure = "1"; rm.textContent = "Tocca di nuovo"; setTimeout(() => { rm.dataset.sure = ""; rm.textContent = "Elimina"; }, 3000); return; }
         drop(e); write(load().filter(x => x.id !== e.id)); render();
       });
-      const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn primary"; dl.textContent = "Scarica foto AI";
+      const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn primary"; dl.textContent = "Scarica foto";
       dl.hidden = !(e.photos > 0);
       dl.addEventListener("click", async () => {
         dl.disabled = true; dl.textContent = "Salvo…";
@@ -119,7 +119,7 @@
         const folder = (e.titolo || "Archivio").replace(/[\\/:*?"<>|]/g, " ").trim().slice(0, 60) || "Archivio";
         for (let i = 0; i < e.photos; i++) {
           const b = await DB.get(e.id + ":" + i); if (!b) continue;
-          const name = String(i + 1).padStart(2, "0") + "-ai.jpg";
+          const name = String(i + 1).padStart(2, "0") + (i === e.photos - 1 && e.chart ? "-misure.jpg" : "-ai.jpg");
           try {
             if (G) {
               const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(b); });
@@ -131,9 +131,12 @@
           } catch (_) {}
         }
         dl.textContent = ok ? ok + " foto salvate ✓" : "Non riesco a salvarle"; dl.disabled = false;
-        setTimeout(() => { dl.textContent = "Scarica foto AI"; }, 2500);
+        setTimeout(() => { dl.textContent = "Scarica foto"; }, 2500);
       });
-      bar.append(dl, cp, rm); li.append(strip, t, d, bar); box.appendChild(li);
+      const ct = document.createElement("button"); ct.type = "button"; ct.className = "btn"; ct.textContent = "Copia titolo";
+      ct.hidden = !e.titolo;
+      ct.addEventListener("click", async () => { const ok = window.LLCopy ? await window.LLCopy(e.titolo || "") : false; ct.textContent = ok ? "Copiato ✓" : "Non riesco a copiare"; setTimeout(() => { ct.textContent = "Copia titolo"; }, 1800); });
+      bar.append(dl, ct, cp, rm); li.append(strip, t, d, bar); box.appendChild(li);
     }
   }
 
